@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 class SnowflakeClient:
     """Snowflake database client for handling connections and queries"""
     
-    def __init__(self, account: str, user: str, warehouse: str, database: str, schema: str):
+    def __init__(self, account: str, user: str, warehouse: str, database: str, schema: str, role: str = None):
         """
         Initialize Snowflake client with connection parameters for external browser authentication
         
@@ -16,12 +16,14 @@ class SnowflakeClient:
             warehouse: Snowflake warehouse to use
             database: Database name
             schema: Schema name
+            role: Snowflake role to use (optional)
         """
         self.account = account
         self.user = user
         self.warehouse = warehouse
         self.database = database
         self.schema = schema
+        self.role = role
         self.connection = None
     
     def connect(self) -> bool:
@@ -32,15 +34,21 @@ class SnowflakeClient:
             bool: True if connection successful, False otherwise
         """
         try:
-            self.connection = snowflake.connector.connect(
-                account=self.account,
-                user=self.user,
-                authenticator='externalbrowser',
-                warehouse=self.warehouse,
-                database=self.database,
-                schema=self.schema,
-                client_session_keep_alive=True
-            )
+            connection_params = {
+                'account': self.account,
+                'user': self.user,
+                'authenticator': 'externalbrowser',
+                'warehouse': self.warehouse,
+                'database': self.database,
+                'schema': self.schema,
+                'client_session_keep_alive': True
+            }
+            
+            # Add role if specified
+            if self.role:
+                connection_params['role'] = self.role
+                
+            self.connection = snowflake.connector.connect(**connection_params)
             return True
         except Exception as e:
             print(f"Connection error: {str(e)}")

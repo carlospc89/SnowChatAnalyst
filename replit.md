@@ -51,9 +51,9 @@ Authentication method: External browser authentication for Snowflake connections
 
 ## Data Flow
 
-1. **Authentication**: User provides Snowflake credentials through Streamlit interface
+1. **Authentication**: User provides Snowflake credentials through external browser authentication
 2. **Connection**: SnowflakeClient establishes secure connection to Snowflake instance
-3. **Schema Discovery**: CortexAnalyst analyzes available tables and builds semantic model
+3. **Semantic Model Setup**: User can either upload custom YAML semantic model or use automatic schema discovery
 4. **Query Processing**: User natural language questions are processed through Cortex Analyst
 5. **Result Display**: SQL results are returned and displayed in the Streamlit interface
 6. **Chat History**: Conversations are maintained in session state for context

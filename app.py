@@ -3,6 +3,7 @@ import pandas as pd
 from snowflake_client import SnowflakeClient
 from cortex_analyst import CortexAnalyst
 import os
+import yaml
 
 # Page configuration
 st.set_page_config(
@@ -23,6 +24,10 @@ def initialize_session_state():
         st.session_state.chat_history = []
     if 'connection_status' not in st.session_state:
         st.session_state.connection_status = None
+    if 'semantic_model_uploaded' not in st.session_state:
+        st.session_state.semantic_model_uploaded = False
+    if 'semantic_model_content' not in st.session_state:
+        st.session_state.semantic_model_content = None
 
 def reset_connection():
     """Reset connection state"""
@@ -31,6 +36,8 @@ def reset_connection():
     st.session_state.cortex_analyst = None
     st.session_state.connection_status = None
     st.session_state.chat_history = []
+    st.session_state.semantic_model_uploaded = False
+    st.session_state.semantic_model_content = None
 
 def authentication_tab():
     """Handle authentication and Snowflake connection setup"""
@@ -48,6 +55,8 @@ def authentication_tab():
         with col2:
             st.info(f"**Warehouse:** {st.session_state.warehouse}")
             st.info(f"**User:** {st.session_state.username}")
+            if hasattr(st.session_state, 'role') and st.session_state.role:
+                st.info(f"**Role:** {st.session_state.role}")
         
         if st.button("🔄 Disconnect", type="secondary"):
             reset_connection()
@@ -88,6 +97,10 @@ def authentication_tab():
                 value="PUBLIC",
                 help="Schema within the database"
             )
+            role = st.text_input(
+                "Role (Optional)", 
+                help="Snowflake role to use for connection"
+            )
         
         submitted = st.form_submit_button("🔗 Connect via Browser", type="primary")
     
@@ -104,7 +117,8 @@ def authentication_tab():
                     user=username,
                     warehouse=warehouse,
                     database=database,
-                    schema=schema
+                    schema=schema,
+                    role=role if role.strip() else None
                 )
                 
                 # Test connection (this will open browser)
@@ -118,6 +132,7 @@ def authentication_tab():
                     st.session_state.warehouse = warehouse
                     st.session_state.database = database
                     st.session_state.schema = schema
+                    st.session_state.role = role if role.strip() else None
                     st.session_state.connection_status = "Connected"
                     
                     st.success("✅ Successfully connected to Snowflake!")
@@ -129,6 +144,132 @@ def authentication_tab():
                 st.error(f"❌ Connection error: {str(e)}")
                 st.error("💡 Make sure you have access to Snowflake and complete the browser authentication.")
 
+def semantic_model_tab():
+    """Handle semantic model upload and management"""
+    st.header("📋 Semantic Model")
+    
+    if not st.session_state.authenticated:
+        st.warning("⚠️ Please authenticate with Snowflake first in the Authentication tab.")
+        return
+    
+    st.write("Upload your semantic model YAML file to provide custom definitions for your data structure.")
+    
+    # Display current status
+    if st.session_state.semantic_model_uploaded:
+        st.success("✅ Semantic model loaded successfully!")
+        
+        with st.expander("📄 View Current Semantic Model", expanded=False):
+            if st.session_state.semantic_model_content:
+                st.code(st.session_state.semantic_model_content, language="yaml")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Upload New Model", type="secondary"):
+                st.session_state.semantic_model_uploaded = False
+                st.session_state.semantic_model_content = None
+                st.rerun()
+        with col2:
+            if st.button("🗑️ Remove Model", type="secondary"):
+                st.session_state.semantic_model_uploaded = False
+                st.session_state.semantic_model_content = None
+                # Reinitialize Cortex Analyst without custom model
+                if st.session_state.cortex_analyst:
+                    st.session_state.cortex_analyst = CortexAnalyst(st.session_state.snowflake_client)
+                st.success("Semantic model removed. Using automatic schema discovery.")
+                st.rerun()
+        
+        return
+    
+    # File upload section
+    st.subheader("📤 Upload Semantic Model")
+    
+    uploaded_file = st.file_uploader(
+        "Choose a YAML file",
+        type=['yaml', 'yml'],
+        help="Upload your semantic model definition in YAML format"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Read the file content
+            file_content = uploaded_file.read().decode('utf-8')
+            
+            # Validate YAML format
+            yaml_data = yaml.safe_load(file_content)
+            
+            # Basic validation of semantic model structure
+            if not isinstance(yaml_data, dict):
+                st.error("❌ Invalid YAML format. The file should contain a dictionary structure.")
+                return
+            
+            # Store the semantic model
+            st.session_state.semantic_model_content = file_content
+            st.session_state.semantic_model_uploaded = True
+            
+            # Update Cortex Analyst with custom semantic model
+            if st.session_state.cortex_analyst:
+                st.session_state.cortex_analyst.load_custom_semantic_model(yaml_data)
+            
+            st.success("✅ Semantic model uploaded successfully!")
+            st.rerun()
+            
+        except yaml.YAMLError as e:
+            st.error(f"❌ Invalid YAML format: {str(e)}")
+        except Exception as e:
+            st.error(f"❌ Error processing file: {str(e)}")
+    
+    # Sample semantic model format
+    with st.expander("📖 Semantic Model Format Example", expanded=False):
+        sample_yaml = """
+semantic_model:
+  name: "Sales Analytics"
+  description: "Sales data semantic model"
+  
+  tables:
+    - name: "SALES"
+      description: "Sales transactions table"
+      columns:
+        - name: "SALE_ID"
+          type: "NUMBER"
+          description: "Unique sale identifier"
+        - name: "CUSTOMER_ID"
+          type: "NUMBER"
+          description: "Customer identifier"
+        - name: "PRODUCT_NAME"
+          type: "VARCHAR"
+          description: "Product name"
+        - name: "SALE_AMOUNT"
+          type: "NUMBER"
+          description: "Sale amount in USD"
+        - name: "SALE_DATE"
+          type: "DATE"
+          description: "Date of sale"
+        - name: "REGION"
+          type: "VARCHAR"
+          description: "Sales region"
+    
+    - name: "CUSTOMERS"
+      description: "Customer information table"
+      columns:
+        - name: "CUSTOMER_ID"
+          type: "NUMBER"
+          description: "Unique customer identifier"
+        - name: "CUSTOMER_NAME"
+          type: "VARCHAR"
+          description: "Customer full name"
+        - name: "EMAIL"
+          type: "VARCHAR"
+          description: "Customer email address"
+
+  relationships:
+    - from_table: "SALES"
+      from_column: "CUSTOMER_ID"
+      to_table: "CUSTOMERS"
+      to_column: "CUSTOMER_ID"
+      type: "many_to_one"
+"""
+        st.code(sample_yaml, language="yaml")
+
 def chatbot_tab():
     """Handle chatbot interface and natural language queries"""
     if not st.session_state.authenticated:
@@ -136,6 +277,13 @@ def chatbot_tab():
         return
     
     st.header("🤖 Cortex Analyst Chatbot")
+    
+    # Show semantic model status
+    if st.session_state.semantic_model_uploaded:
+        st.info("📋 Using custom semantic model for enhanced query generation.")
+    else:
+        st.info("🔍 Using automatic schema discovery. Upload a semantic model for better results.")
+    
     st.write("Ask questions about your data in natural language, and I'll convert them to SQL queries using Snowflake Cortex Analyst.")
     
     # Display chat history
@@ -223,12 +371,15 @@ def main():
     st.markdown("---")
     
     # Create tabs
-    tab1, tab2 = st.tabs(["🔐 Authentication", "🤖 Chatbot"])
+    tab1, tab2, tab3 = st.tabs(["🔐 Authentication", "📋 Semantic Model", "🤖 Chatbot"])
     
     with tab1:
         authentication_tab()
     
     with tab2:
+        semantic_model_tab()
+    
+    with tab3:
         chatbot_tab()
     
     # Footer

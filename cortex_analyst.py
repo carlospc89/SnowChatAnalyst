@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import yaml
 from typing import Dict, Any, Optional
 from snowflake_client import SnowflakeClient
 
@@ -15,6 +16,7 @@ class CortexAnalyst:
         """
         self.client = snowflake_client
         self.semantic_model = None
+        self.custom_semantic_model = None
         self._initialize_semantic_model()
     
     def _initialize_semantic_model(self):
@@ -53,21 +55,90 @@ class CortexAnalyst:
         Returns:
             str: Formatted context prompt
         """
-        if not self.semantic_model:
+        active_model = self._get_active_semantic_model()
+        
+        if not active_model:
             return f"Convert this question to SQL: {question}"
         
-        # Build context with available tables and columns
-        context = f"Database: {self.semantic_model['database']}\n"
-        context += f"Schema: {self.semantic_model['schema']}\n\n"
+        # Handle custom semantic model format
+        if self.custom_semantic_model:
+            return self._create_custom_context_prompt(question, active_model)
+        
+        # Handle auto-discovered semantic model
+        context = f"Database: {active_model['database']}\n"
+        context += f"Schema: {active_model['schema']}\n\n"
         context += "Available Tables and Columns:\n"
         
-        for table_name, table_info in self.semantic_model['tables'].items():
+        for table_name, table_info in active_model['tables'].items():
             context += f"\n{table_name}:\n"
             for column in table_info['columns']:
                 context += f"  - {column['COLUMN_NAME']} ({column['DATA_TYPE']})\n"
         
         context += f"\nQuestion: {question}\n"
         context += "Generate a SQL query to answer this question. Return only the SQL query without any explanations."
+        
+        return context
+    
+    def _create_custom_context_prompt(self, question: str, semantic_model: Dict[str, Any]) -> str:
+        """
+        Create context prompt using custom semantic model
+        
+        Args:
+            question: User's natural language question
+            semantic_model: Custom semantic model data
+            
+        Returns:
+            str: Formatted context prompt
+        """
+        context = ""
+        
+        # Handle semantic model structure
+        if 'semantic_model' in semantic_model:
+            model_info = semantic_model['semantic_model']
+            
+            if 'name' in model_info:
+                context += f"Semantic Model: {model_info['name']}\n"
+            if 'description' in model_info:
+                context += f"Description: {model_info['description']}\n"
+            
+            context += "\nAvailable Tables and Columns:\n"
+            
+            # Process tables
+            if 'tables' in model_info:
+                for table in model_info['tables']:
+                    table_name = table.get('name', 'UNKNOWN')
+                    context += f"\n{table_name}:"
+                    
+                    if 'description' in table:
+                        context += f" - {table['description']}"
+                    context += "\n"
+                    
+                    # Process columns
+                    if 'columns' in table:
+                        for column in table['columns']:
+                            col_name = column.get('name', 'UNKNOWN')
+                            col_type = column.get('type', 'UNKNOWN')
+                            col_desc = column.get('description', '')
+                            
+                            context += f"  - {col_name} ({col_type})"
+                            if col_desc:
+                                context += f" - {col_desc}"
+                            context += "\n"
+            
+            # Add relationships if available
+            if 'relationships' in model_info:
+                context += "\nTable Relationships:\n"
+                for rel in model_info['relationships']:
+                    from_table = rel.get('from_table', '')
+                    from_col = rel.get('from_column', '')
+                    to_table = rel.get('to_table', '')
+                    to_col = rel.get('to_column', '')
+                    rel_type = rel.get('type', 'related to')
+                    
+                    context += f"  - {from_table}.{from_col} {rel_type} {to_table}.{to_col}\n"
+        
+        context += f"\nQuestion: {question}\n"
+        context += "Generate a SQL query to answer this question using the tables and columns described above. Return only the SQL query without any explanations."
         
         return context
     
@@ -242,4 +313,28 @@ class CortexAnalyst:
         Returns:
             dict: Summary of database structure
         """
+        return self.semantic_model
+    
+    def load_custom_semantic_model(self, yaml_data: Dict[str, Any]):
+        """
+        Load custom semantic model from YAML data
+        
+        Args:
+            yaml_data: Parsed YAML data containing semantic model definition
+        """
+        try:
+            self.custom_semantic_model = yaml_data
+            print("Custom semantic model loaded successfully")
+        except Exception as e:
+            print(f"Error loading custom semantic model: {str(e)}")
+    
+    def _get_active_semantic_model(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the active semantic model (custom if available, otherwise auto-discovered)
+        
+        Returns:
+            dict: Active semantic model
+        """
+        if self.custom_semantic_model:
+            return self.custom_semantic_model
         return self.semantic_model
