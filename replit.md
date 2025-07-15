@@ -7,6 +7,7 @@ This is a Streamlit-based web application that provides a conversational interfa
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Authentication method: External browser authentication for Snowflake connections (SSO).
 
 ## System Architecture
 
@@ -76,9 +77,11 @@ Preferred communication style: Simple, everyday language.
 - **Session Management**: Streamlit session state for user experience continuity
 
 ### Security Considerations
-- Credentials handled through secure input fields (password masking)
+- External browser authentication eliminates password handling in the application
+- SSO integration provides enterprise-grade security
 - No hardcoded sensitive information in source code
 - Connection credentials stored only in session state (not persisted)
+- Browser-based authentication supports multi-factor authentication and federated identity
 
 ### Scalability Design
 - Stateless application design allows for easy horizontal scaling

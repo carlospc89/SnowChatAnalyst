@@ -6,22 +6,19 @@ from typing import Optional, Dict, Any
 class SnowflakeClient:
     """Snowflake database client for handling connections and queries"""
     
-    def __init__(self, account: str, user: str, password: str, 
-                 warehouse: str, database: str, schema: str):
+    def __init__(self, account: str, user: str, warehouse: str, database: str, schema: str):
         """
-        Initialize Snowflake client with connection parameters
+        Initialize Snowflake client with connection parameters for external browser authentication
         
         Args:
             account: Snowflake account identifier
             user: Username for authentication
-            password: Password for authentication
             warehouse: Snowflake warehouse to use
             database: Database name
             schema: Schema name
         """
         self.account = account
         self.user = user
-        self.password = password
         self.warehouse = warehouse
         self.database = database
         self.schema = schema
@@ -29,7 +26,7 @@ class SnowflakeClient:
     
     def connect(self) -> bool:
         """
-        Establish connection to Snowflake
+        Establish connection to Snowflake using external browser authentication
         
         Returns:
             bool: True if connection successful, False otherwise
@@ -38,7 +35,7 @@ class SnowflakeClient:
             self.connection = snowflake.connector.connect(
                 account=self.account,
                 user=self.user,
-                password=self.password,
+                authenticator='externalbrowser',
                 warehouse=self.warehouse,
                 database=self.database,
                 schema=self.schema,

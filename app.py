@@ -55,7 +55,11 @@ def authentication_tab():
         
         return
     
-    st.write("Please enter your Snowflake credentials to connect:")
+    st.write("**External Browser Authentication**: This app uses Snowflake's secure browser-based authentication (SSO).")
+    st.info("💡 When you click 'Connect', your default browser will open for Snowflake authentication. Make sure you're logged into Snowflake in your browser.")
+    
+    # Warning for browser environments
+    st.warning("⚠️ **Note**: External browser authentication requires access to your local browser. This works best when running locally or in environments that support browser access.")
     
     with st.form("snowflake_auth"):
         col1, col2 = st.columns(2)
@@ -65,14 +69,16 @@ def authentication_tab():
                 "Account Identifier", 
                 help="Your Snowflake account identifier (e.g., abc12345.us-east-1)"
             )
-            username = st.text_input("Username")
+            username = st.text_input(
+                "Username",
+                help="Your Snowflake username"
+            )
             warehouse = st.text_input(
                 "Warehouse", 
                 help="Snowflake warehouse to use for queries"
             )
         
         with col2:
-            password = st.text_input("Password", type="password")
             database = st.text_input(
                 "Database", 
                 help="Database containing your data"
@@ -83,26 +89,25 @@ def authentication_tab():
                 help="Schema within the database"
             )
         
-        submitted = st.form_submit_button("🔗 Connect to Snowflake", type="primary")
+        submitted = st.form_submit_button("🔗 Connect via Browser", type="primary")
     
     if submitted:
-        if not all([account, username, password, warehouse, database, schema]):
+        if not all([account, username, warehouse, database, schema]):
             st.error("❌ Please fill in all required fields.")
             return
         
-        with st.spinner("Connecting to Snowflake..."):
+        with st.spinner("Opening browser for authentication... Please complete the login in your browser."):
             try:
-                # Create Snowflake client
+                # Create Snowflake client with external browser authentication
                 client = SnowflakeClient(
                     account=account,
                     user=username,
-                    password=password,
                     warehouse=warehouse,
                     database=database,
                     schema=schema
                 )
                 
-                # Test connection
+                # Test connection (this will open browser)
                 if client.test_connection():
                     # Store in session state
                     st.session_state.snowflake_client = client
@@ -118,10 +123,11 @@ def authentication_tab():
                     st.success("✅ Successfully connected to Snowflake!")
                     st.rerun()
                 else:
-                    st.error("❌ Failed to connect to Snowflake. Please check your credentials.")
+                    st.error("❌ Failed to connect to Snowflake. Please check your credentials and try again.")
             
             except Exception as e:
                 st.error(f"❌ Connection error: {str(e)}")
+                st.error("💡 Make sure you have access to Snowflake and complete the browser authentication.")
 
 def chatbot_tab():
     """Handle chatbot interface and natural language queries"""
