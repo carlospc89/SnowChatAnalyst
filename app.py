@@ -622,35 +622,20 @@ def chatbot_tab():
 
                     # Step 4: Route and process based on classification and data sources
                     if classification['type'] == QueryType.DATA_QUERY:
-                        # Show warning if semantic model data source is disabled or missing
-                        if not use_semantic_model or not st.session_state.semantic_model_uploaded:
+                        # Show warning if semantic model is not uploaded (but still process the query)
+                        if not st.session_state.semantic_model_uploaded:
                             warning_msg = (
-                                "⚠️ **Limited Accuracy Warning**: Data queries need semantic model data source enabled. "
-                                "Enable 'Semantic Model Data' in the sidebar or upload a semantic model for better results."
+                                "⚠️ **Auto-Discovery Mode**: Using automatic schema discovery. "
+                                "Upload a semantic model for better accuracy and more detailed results."
                             )
 
-                            st.warning(warning_msg)
+                            st.info(warning_msg)
 
-                            # Add warning to memory
-                            st.session_state.memory_manager.add_message(
-                                st.session_state.session_id, 'system', warning_msg)
-
-                        # Only process SQL query if semantic model data source is enabled
-                        if use_semantic_model and st.session_state.semantic_model_uploaded:
-                            # Process the data query with SQL generation using selected model
-                            result = st.session_state.cortex_analyst.process_question(
-                                user_question, selected_model)
-                            result['classification'] = classification
-                        else:
-                            # Fallback to general response if semantic model not available/enabled
-                            result = st.session_state.response_generator.generate_response(
-                                user_question,
-                                classification,
-                                False,  # Treat as no semantic model
-                                user_context,
-                                selected_model,
-                                web_search_context)
-                            result['classification'] = classification
+                        # Process the data query with SQL generation using selected model
+                        # Cortex Analyst can work with both custom semantic models and auto-discovery
+                        result = st.session_state.cortex_analyst.process_question(
+                            user_question, selected_model)
+                        result['classification'] = classification
 
                     else:
                         # Generate dynamic response using Cortex with web search context if available
