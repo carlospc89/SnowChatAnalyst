@@ -75,14 +75,14 @@ class SnowflakeQueryTool(BaseTool):
     
     def __init__(self, snowflake_client: SnowflakeClient):
         super().__init__()
-        self.snowflake_client = snowflake_client
+        self._snowflake_client = snowflake_client
     
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Execute SQL query and return results"""
         try:
             logger.info(f"Executing SQL query: {query}")
             
-            result = self.snowflake_client.execute_query(query)
+            result = self._snowflake_client.execute_query(query)
             
             if result is not None and not result.empty:
                 # Format results for better readability
@@ -112,14 +112,14 @@ class SnowflakeSchemaTool(BaseTool):
     
     def __init__(self, snowflake_client: SnowflakeClient):
         super().__init__()
-        self.snowflake_client = snowflake_client
+        self._snowflake_client = snowflake_client
     
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
         """Get schema information"""
         try:
             if query.lower() == 'tables':
                 # Get all tables
-                tables = self.snowflake_client.get_tables()
+                tables = self._snowflake_client.get_tables()
                 if tables is not None and not tables.empty:
                     return f"Available tables:\n{tables.to_string()}"
                 else:
@@ -128,7 +128,7 @@ class SnowflakeSchemaTool(BaseTool):
             elif query.lower().startswith('search:'):
                 # Search for tables
                 keyword = query[7:].strip()
-                tables = self.snowflake_client.get_tables()
+                tables = self._snowflake_client.get_tables()
                 if tables is not None and not tables.empty:
                     filtered_tables = tables[tables['TABLE_NAME'].str.contains(keyword, case=False, na=False)]
                     if not filtered_tables.empty:
@@ -140,7 +140,7 @@ class SnowflakeSchemaTool(BaseTool):
             
             else:
                 # Get table schema
-                table_schema = self.snowflake_client.get_table_schema(query)
+                table_schema = self._snowflake_client.get_table_schema(query)
                 if table_schema is not None and not table_schema.empty:
                     return f"Schema for table '{query}':\n{table_schema.to_string()}"
                 else:
@@ -195,7 +195,7 @@ class SnowflakeAnalystTool(BaseTool):
     
     def __init__(self, snowflake_client: SnowflakeClient, semantic_model: Optional[Dict[str, Any]] = None):
         super().__init__()
-        self.snowflake_client = snowflake_client
+        self._snowflake_client = snowflake_client
         self.semantic_model = semantic_model
     
     def _run(self, question: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
@@ -213,7 +213,7 @@ class SnowflakeAnalystTool(BaseTool):
             ) as analysis_result
             """
             
-            result = self.snowflake_client.execute_query(cortex_query)
+            result = self._snowflake_client.execute_query(cortex_query)
             
             if result is not None and not result.empty:
                 analysis_result = result.iloc[0]['ANALYSIS_RESULT']
@@ -225,7 +225,7 @@ class SnowflakeAnalystTool(BaseTool):
                     
                     if sql_query:
                         # Execute the generated SQL
-                        query_result = self.snowflake_client.execute_query(sql_query)
+                        query_result = self._snowflake_client.execute_query(sql_query)
                         
                         if query_result is not None and not query_result.empty:
                             return f"Generated SQL:\n{sql_query}\n\nResults:\n{query_result.to_string()}"
