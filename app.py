@@ -588,14 +588,49 @@ def chatbot_tab():
                 
                 else:
                     error_msg = result.get('error', 'Unknown error occurred')
-                    st.error(f"❌ Error: {error_msg}")
+                    failed_sql_query = result.get('sql_query')
+                    classification = result.get('classification', {})
+                    query_type = classification.get('type', QueryType.UNCLEAR)
+                    
+                    with st.chat_message("assistant"):
+                        st.error(f"❌ Error: {error_msg}")
+                        
+                        # Always show the generated SQL query if it exists, even on failure
+                        if failed_sql_query and query_type == QueryType.DATA_QUERY:
+                            with st.expander("📋 Generated SQL Query (Failed)", expanded=True):
+                                st.code(failed_sql_query, language="sql")
+                                st.info("💡 The SQL query was generated but failed during execution. Check the query syntax and table/column names.")
+                                
+                                # Add troubleshooting suggestions
+                                st.markdown("**Troubleshooting Tips:**")
+                                st.markdown("• Verify table names exist in your database/schema")
+                                st.markdown("• Check if column names are correct")
+                                st.markdown("• Ensure you have proper permissions")
+                                st.markdown("• Try uploading a semantic model for better accuracy")
+                        
+                        elif query_type == QueryType.DATA_QUERY and not failed_sql_query:
+                            st.warning("⚠️ No SQL query was generated. This could indicate:")
+                            st.markdown("• The question might be too ambiguous")
+                            st.markdown("• Database connection issues")
+                            st.markdown("• Cortex Analyst service availability")
+                        
+                        # Show classification info for debugging
+                        if classification:
+                            confidence = classification.get('confidence', 0.5)
+                            query_type_name = query_type.value if hasattr(query_type, 'value') else str(query_type)
+                            
+                            with st.expander(f"🔍 Query Classification (Confidence: {confidence:.2f})", expanded=False):
+                                st.write(f"**Type**: {query_type_name}")
+                                st.write(f"**Reasoning**: {classification.get('reasoning', 'No reasoning provided')}")
+                                st.write(f"**Original Question**: {user_question}")
+                                st.write(f"**Semantic Model**: {'✅ Active' if st.session_state.semantic_model_uploaded else '❌ Not uploaded'}")
                     
                     # Log error
                     st.session_state.memory_manager.add_message(
                         st.session_state.session_id,
                         'assistant',
                         f"Error: {error_msg}",
-                        sql_query=result.get('sql_query'),
+                        sql_query=failed_sql_query,
                         execution_status='error',
                         semantic_model_version='custom' if st.session_state.semantic_model_uploaded else 'auto'
                     )
@@ -604,7 +639,7 @@ def chatbot_tab():
                     st.session_state.memory_manager.log_query_performance(
                         st.session_state.session_id,
                         user_question,
-                        result.get('sql_query', ''),
+                        failed_sql_query or '',
                         execution_time,
                         0,
                         st.session_state.semantic_model_uploaded,
@@ -613,7 +648,17 @@ def chatbot_tab():
             
             except Exception as e:
                 error_msg = f"An error occurred while processing your question: {str(e)}"
-                st.error(f"❌ {error_msg}")
+                
+                with st.chat_message("assistant"):
+                    st.error(f"❌ {error_msg}")
+                    
+                    # Try to show any SQL query that might have been generated before the error
+                    if 'result' in locals() and isinstance(result, dict):
+                        potential_sql = result.get('sql_query')
+                        if potential_sql:
+                            with st.expander("📋 Partially Generated SQL Query", expanded=True):
+                                st.code(potential_sql, language="sql")
+                                st.warning("⚠️ This query was generated before the error occurred. It may be incomplete or incorrect.")
                 
                 # Log system error
                 st.session_state.memory_manager.add_message(

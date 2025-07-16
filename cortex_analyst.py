@@ -165,12 +165,15 @@ class CortexAnalyst:
             
             if result is not None and not result.empty:
                 generated_text = result.iloc[0]['GENERATED_SQL']
+                print(f"Raw Cortex response: {generated_text}")  # Debug output
                 
                 # Extract SQL from the response
                 sql_query = self._extract_sql_from_response(generated_text)
+                print(f"Extracted SQL: {sql_query}")  # Debug output
                 return sql_query
-            
-            return None
+            else:
+                print("No result from Cortex query execution")
+                return None
             
         except Exception as e:
             print(f"Error calling Cortex Analyst: {str(e)}")
@@ -279,6 +282,8 @@ class CortexAnalyst:
         Returns:
             dict: Result containing success status, data, SQL query, and any errors
         """
+        sql_query = None
+        
         try:
             # Create context prompt
             prompt = self._create_context_prompt(question)
@@ -289,7 +294,7 @@ class CortexAnalyst:
             if not sql_query:
                 return {
                     'success': False,
-                    'error': 'Failed to generate SQL query from your question',
+                    'error': 'Failed to generate SQL query from your question. This could be due to unclear question or database connection issues.',
                     'data': None,
                     'sql_query': None
                 }
@@ -303,7 +308,7 @@ class CortexAnalyst:
                 'success': False,
                 'error': f'Error processing question: {str(e)}',
                 'data': None,
-                'sql_query': None
+                'sql_query': sql_query  # Include any partially generated SQL
             }
     
     def get_table_summary(self) -> Optional[Dict[str, Any]]:
