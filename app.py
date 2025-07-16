@@ -3,6 +3,8 @@ import pandas as pd
 from snowflake_client import SnowflakeClient
 from cortex_analyst import CortexAnalyst
 from memory_manager import MemoryManager
+from query_router import QueryRouter, QueryType
+from response_generator import ResponseGenerator
 import os
 import yaml
 import sqlite3
@@ -38,6 +40,10 @@ def initialize_session_state():
         st.session_state.memory_manager = MemoryManager()
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
+    if 'query_router' not in st.session_state:
+        st.session_state.query_router = None
+    if 'response_generator' not in st.session_state:
+        st.session_state.response_generator = None
 
 def reset_connection():
     """Reset connection state"""
@@ -136,6 +142,8 @@ def authentication_tab():
                     # Store in session state
                     st.session_state.snowflake_client = client
                     st.session_state.cortex_analyst = CortexAnalyst(client)
+                    st.session_state.query_router = QueryRouter(client)
+                    st.session_state.response_generator = ResponseGenerator(client)
                     st.session_state.authenticated = True
                     st.session_state.account = account
                     st.session_state.username = username
@@ -162,58 +170,7 @@ def authentication_tab():
                 st.error(f"❌ Connection error: {str(e)}")
                 st.error("💡 Make sure you have access to Snowflake and complete the browser authentication.")
 
-def _handle_general_question(question: str) -> Dict[str, Any]:
-    """
-    Handle general questions without SQL generation
-    
-    Args:
-        question: User's general question
-        
-    Returns:
-        dict: Response structure similar to Cortex Analyst but without SQL
-    """
-    question_lower = question.lower()
-    
-    # Greeting responses
-    if any(greeting in question_lower for greeting in ['hello', 'hi', 'hey']):
-        response = ("Hello! I'm your Snowflake Cortex Analyst assistant. I can help you with:\n\n"
-                   "📊 **Data Analysis**: Ask questions about your data (works best with a semantic model)\n"
-                   "💡 **SQL Help**: Get assistance with SQL queries and database concepts\n"
-                   "🔧 **Technical Support**: Learn about Snowflake features and best practices\n\n"
-                   "What would you like to explore today?")
-    
-    elif any(pattern in question_lower for pattern in ['what can you do', 'help', 'capabilities']):
-        response = ("I'm designed to help you interact with your Snowflake data in two main ways:\n\n"
-                   "🔍 **Data Queries**: I can convert your natural language questions into SQL queries and execute them against your Snowflake database. This works best when you upload a semantic model.\n\n"
-                   "💬 **General Assistance**: I can help with SQL concepts, explain database terminology, provide best practices, and answer technical questions about Snowflake.\n\n"
-                   "**Current Status**: " + 
-                   ("✅ Custom semantic model loaded - ready for accurate data queries!" if st.session_state.semantic_model_uploaded 
-                    else "⚠️ No semantic model uploaded - data queries may be less accurate"))
-    
-    elif any(pattern in question_lower for pattern in ['thank you', 'thanks']):
-        response = "You're welcome! Feel free to ask me anything about your data or SQL queries."
-    
-    elif any(pattern in question_lower for pattern in ['bye', 'goodbye']):
-        response = "Goodbye! Your session data is saved. Feel free to return anytime to continue exploring your data."
-    
-    else:
-        # General conversational response
-        response = ("I understand you're asking about general topics. While I'm specialized in helping with Snowflake data analysis, "
-                   "I can also assist with:\n\n"
-                   "• SQL query writing and optimization\n"
-                   "• Database concepts and terminology\n"
-                   "• Snowflake features and best practices\n"
-                   "• Data analysis methodologies\n\n"
-                   "If you have specific questions about your data, I can help generate SQL queries to find answers. "
-                   "For the most accurate results, consider uploading a semantic model first.")
-    
-    return {
-        'success': True,
-        'data': None,
-        'sql_query': None,
-        'response': response,
-        'error': None
-    }
+
 
 def semantic_model_tab():
     """Handle semantic model upload and management"""
@@ -484,41 +441,6 @@ def chatbot_tab():
         # Set flag to show fresh result instead of chat history
         st.session_state.showing_fresh_result = True
         
-        # Enhanced data query detection - more precise patterns
-        question_lower = user_question.lower()
-        
-        # Patterns that indicate data queries (requiring SQL generation)
-        data_query_patterns = [
-            # Direct SQL mentions
-            'select', 'from', 'where', 'group by', 'order by', 'having', 'join',
-            # Aggregation requests
-            'how many', 'count of', 'total', 'sum of', 'average', 'maximum', 'minimum',
-            # Analysis requests
-            'show me', 'find', 'list', 'get', 'retrieve', 'analyze', 'breakdown',
-            # Data-specific terms with context
-            'sales by', 'revenue by', 'customers who', 'products that', 'orders where',
-            'data from', 'records from', 'rows from', 'information from',
-            # Time-based queries
-            'last month', 'this year', 'between', 'since', 'until', 'during',
-            # Comparison queries
-            'compare', 'versus', 'vs', 'top', 'bottom', 'highest', 'lowest'
-        ]
-        
-        # Exclude common greetings and general questions
-        general_patterns = [
-            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
-            'how are you', 'what can you do', 'help', 'explain', 'what is',
-            'how to', 'can you', 'tell me about', 'what does', 'define',
-            'thank you', 'thanks', 'bye', 'goodbye'
-        ]
-        
-        # Check if it's a general question first
-        is_general_question = any(pattern in question_lower for pattern in general_patterns)
-        
-        # Check if it's a data query
-        is_data_query = (not is_general_question and 
-                        any(pattern in question_lower for pattern in data_query_patterns))
-        
         # Log user message
         st.session_state.memory_manager.add_message(
             st.session_state.session_id,
@@ -526,14 +448,28 @@ def chatbot_tab():
             user_question
         )
         
-        with st.spinner("Processing your question..."):
+        with st.spinner("Analyzing your question..."):
             start_time = time.time()
             
             try:
-                if is_data_query:
-                    # This is a data query - use Cortex Analyst for SQL generation
+                # Step 1: Classify the query using dynamic routing
+                classification = st.session_state.query_router.classify_query(
+                    user_question, 
+                    st.session_state.semantic_model_uploaded
+                )
+                
+                # Step 2: Get user context for personalized responses
+                user_context = {
+                    'session_stats': st.session_state.memory_manager.get_session_stats(st.session_state.session_id),
+                    'has_semantic_model': st.session_state.semantic_model_uploaded,
+                    'database': st.session_state.get('database', ''),
+                    'schema': st.session_state.get('schema', '')
+                }
+                
+                # Step 3: Route and process based on classification
+                if classification['type'] == QueryType.DATA_QUERY:
+                    # Show warning if no semantic model
                     if not st.session_state.semantic_model_uploaded:
-                        # Warning for data queries without semantic model
                         warning_msg = ("⚠️ **Limited Accuracy Warning**: You're asking about data but no semantic model is uploaded. "
                                      "The response may contain inaccuracies. For better results, please upload a semantic model first.")
                         
@@ -548,10 +484,17 @@ def chatbot_tab():
                     
                     # Process the data query with SQL generation
                     result = st.session_state.cortex_analyst.process_question(user_question)
+                    result['classification'] = classification
                     
                 else:
-                    # This is a general question - respond without SQL generation
-                    result = _handle_general_question(user_question)
+                    # Generate dynamic response using Cortex
+                    result = st.session_state.response_generator.generate_response(
+                        user_question, 
+                        classification, 
+                        st.session_state.semantic_model_uploaded,
+                        user_context
+                    )
+                    result['classification'] = classification
                 
                 execution_time = int((time.time() - start_time) * 1000)
                 
@@ -563,8 +506,10 @@ def chatbot_tab():
                     sql_query = result.get('sql_query')
                     data = result.get('data')
                     response_text = result.get('response')
+                    classification = result.get('classification', {})
+                    query_type = classification.get('type', QueryType.UNCLEAR)
                     
-                    if is_data_query and sql_query:
+                    if query_type == QueryType.DATA_QUERY and sql_query:
                         # Handle data query response
                         row_count = len(data) if isinstance(data, pd.DataFrame) else 0
                         
@@ -620,8 +565,17 @@ def chatbot_tab():
                         )
                     
                     else:
-                        # Handle general question response
+                        # Handle non-data responses (greetings, help, general questions)
                         with st.chat_message("assistant"):
+                            # Show classification info for debugging (can be removed later)
+                            confidence = classification.get('confidence', 0.5)
+                            query_type_name = query_type.value if hasattr(query_type, 'value') else str(query_type)
+                            
+                            with st.expander(f"🔍 Query Classification (Confidence: {confidence:.2f})", expanded=False):
+                                st.write(f"**Type**: {query_type_name}")
+                                st.write(f"**Reasoning**: {classification.get('reasoning', 'No reasoning provided')}")
+                            
+                            # Display the response
                             st.markdown(response_text)
                         
                         # Log general response

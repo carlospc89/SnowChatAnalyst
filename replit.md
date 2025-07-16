@@ -57,15 +57,32 @@ Authentication method: External browser authentication for Snowflake connections
   - Session statistics and semantic model usage tracking
   - Query performance logging and analysis
 
+### 5. Query Router (`query_router.py`)
+- **Purpose**: Dynamic query classification using Snowflake Cortex for intelligent routing
+- **Key Features**:
+  - AI-powered query classification (data queries vs conversational)
+  - Confidence scoring and reasoning for classifications
+  - Fallback heuristics for classification failures
+  - Context-aware routing decisions based on semantic model availability
+
+### 6. Response Generator (`response_generator.py`)
+- **Purpose**: Dynamic response generation using Cortex for personalized, context-aware responses
+- **Key Features**:
+  - Cortex-powered greeting and help responses
+  - Context-aware personalization based on user session
+  - Dynamic content generation instead of hard-coded templates
+  - Fallback responses for system failures
+
 ## Data Flow
 
 1. **Authentication**: User provides Snowflake credentials through external browser authentication
 2. **Connection**: SnowflakeClient establishes secure connection to Snowflake instance
 3. **Semantic Model Setup**: User can either upload custom YAML semantic model or use automatic schema discovery
-4. **Query Classification**: System intelligently distinguishes between data queries (requiring SQL) and general questions (conversational)
-5. **Query Processing**: Data questions are processed through Cortex Analyst with appropriate warnings if no semantic model is present
-6. **Result Display**: SQL results are returned and displayed in the Streamlit interface with performance metrics
-7. **Chat History**: All conversations are stored in in-memory SQLite database with session tracking
+4. **Dynamic Query Classification**: AI-powered routing using Cortex Analyst to classify queries into types (data queries, greetings, help requests, general questions)
+5. **Intelligent Response Generation**: Context-aware response generation using Cortex for personalized, dynamic responses instead of hard-coded templates
+6. **Query Processing**: Data questions are processed through Cortex Analyst with appropriate warnings if no semantic model is present
+7. **Result Display**: SQL results are returned and displayed in the Streamlit interface with performance metrics and classification insights
+8. **Chat History**: All conversations are stored in in-memory SQLite database with session tracking and routing analytics
 
 ## External Dependencies
 
