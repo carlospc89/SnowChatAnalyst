@@ -2,8 +2,14 @@ import streamlit as st
 import pandas as pd
 from snowflake_client import SnowflakeClient
 from cortex_analyst import CortexAnalyst
+from memory_manager import MemoryManager
 import os
 import yaml
+import sqlite3
+import datetime
+import time
+import uuid
+from typing import List, Dict, Any
 
 # Page configuration
 st.set_page_config(
@@ -28,6 +34,10 @@ def initialize_session_state():
         st.session_state.semantic_model_uploaded = False
     if 'semantic_model_content' not in st.session_state:
         st.session_state.semantic_model_content = None
+    if 'memory_manager' not in st.session_state:
+        st.session_state.memory_manager = MemoryManager()
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
 
 def reset_connection():
     """Reset connection state"""
@@ -135,6 +145,14 @@ def authentication_tab():
                     st.session_state.role = role if role.strip() else None
                     st.session_state.connection_status = "Connected"
                     
+                    # Create memory session
+                    st.session_state.memory_manager.create_session(
+                        session_id=st.session_state.session_id,
+                        snowflake_account=account,
+                        database=database,
+                        schema=schema
+                    )
+                    
                     st.success("✅ Successfully connected to Snowflake!")
                     st.rerun()
                 else:
@@ -175,6 +193,18 @@ def semantic_model_tab():
                 # Reinitialize Cortex Analyst without custom model
                 if st.session_state.cortex_analyst:
                     st.session_state.cortex_analyst = CortexAnalyst(st.session_state.snowflake_client)
+                
+                # Update memory manager
+                st.session_state.memory_manager.update_semantic_model_status(
+                    st.session_state.session_id, False
+                )
+                st.session_state.memory_manager.add_message(
+                    st.session_state.session_id, 
+                    'system', 
+                    'Semantic model removed. Using automatic schema discovery.',
+                    semantic_model_version='auto'
+                )
+                
                 st.success("Semantic model removed. Using automatic schema discovery.")
                 st.rerun()
         
@@ -209,6 +239,17 @@ def semantic_model_tab():
             # Update Cortex Analyst with custom semantic model
             if st.session_state.cortex_analyst:
                 st.session_state.cortex_analyst.load_custom_semantic_model(yaml_data)
+            
+            # Update memory manager
+            st.session_state.memory_manager.update_semantic_model_status(
+                st.session_state.session_id, True
+            )
+            st.session_state.memory_manager.add_message(
+                st.session_state.session_id, 
+                'system', 
+                'Custom semantic model uploaded and loaded',
+                semantic_model_version='custom'
+            )
             
             st.success("✅ Semantic model uploaded successfully!")
             st.rerun()
@@ -278,27 +319,89 @@ def chatbot_tab():
     
     st.header("🤖 Cortex Analyst Chatbot")
     
-    # Show semantic model status
+    # Enhanced semantic model status and warnings
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        if st.session_state.semantic_model_uploaded:
+            st.success("📋 **Custom Semantic Model Active** - Enhanced accuracy for data queries")
+        else:
+            st.warning("⚠️ **No Semantic Model** - Responses about data may be less accurate. Consider uploading a semantic model for better results.")
+    
+    with col2:
+        # Session stats
+        stats = st.session_state.memory_manager.get_session_stats(st.session_state.session_id)
+        if stats:
+            st.metric("Queries", stats.get('user_messages', 0))
+    
+    # Usage guidance based on semantic model status
     if st.session_state.semantic_model_uploaded:
-        st.info("📋 Using custom semantic model for enhanced query generation.")
+        st.info("💡 You can ask detailed questions about your data. The semantic model will help generate accurate SQL queries.")
     else:
-        st.info("🔍 Using automatic schema discovery. Upload a semantic model for better results.")
+        st.info("💡 **For data questions**: Responses may be inaccurate without a semantic model. **For general questions**: Feel free to ask anything!")
     
-    st.write("Ask questions about your data in natural language, and I'll convert them to SQL queries using Snowflake Cortex Analyst.")
+    # Capability distinction
+    with st.expander("🎯 What can I help you with?", expanded=False):
+        col_a, col_b = st.columns(2)
+        
+        with col_a:
+            st.subheader("📊 Data Questions")
+            if st.session_state.semantic_model_uploaded:
+                st.write("✅ **Fully Supported** - Accurate SQL generation")
+                st.write("• Sales analysis queries")
+                st.write("• Complex joins and aggregations")
+                st.write("• Trend analysis")
+                st.write("• Custom calculations")
+            else:
+                st.write("⚠️ **Limited Accuracy** - No semantic context")
+                st.write("• Basic queries may work")
+                st.write("• Results may be incorrect")
+                st.write("• Table/column names might be wrong")
+                st.write("• **Recommendation**: Upload semantic model first")
+        
+        with col_b:
+            st.subheader("💬 General Questions")
+            st.write("✅ **Always Available** - No semantic model needed")
+            st.write("• SQL help and explanations")
+            st.write("• Database concepts")
+            st.write("• Best practices")
+            st.write("• Technical guidance")
     
-    # Display chat history
+    # Display enhanced chat history with memory
     chat_container = st.container()
     
     with chat_container:
-        for i, (question, response, sql_query) in enumerate(st.session_state.chat_history):
-            with st.expander(f"💬 Query {i+1}: {question[:50]}{'...' if len(question) > 50 else ''}", expanded=False):
-                st.write("**Question:**", question)
-                if sql_query:
-                    st.code(sql_query, language="sql")
-                if isinstance(response, pd.DataFrame) and not response.empty:
-                    st.dataframe(response, use_container_width=True)
-                elif isinstance(response, str):
-                    st.error(response)
+        # Load chat history from memory
+        chat_history = st.session_state.memory_manager.get_chat_history(st.session_state.session_id)
+        
+        if chat_history:
+            st.subheader("📜 Chat History")
+            for i, msg in enumerate(chat_history):
+                if msg['message_type'] == 'user':
+                    with st.chat_message("user"):
+                        st.write(msg['content'])
+                
+                elif msg['message_type'] == 'assistant':
+                    with st.chat_message("assistant"):
+                        st.write(msg['content'])
+                        
+                        # Show SQL query if available
+                        if msg['sql_query']:
+                            with st.expander("📋 Generated SQL", expanded=False):
+                                st.code(msg['sql_query'], language="sql")
+                        
+                        # Show execution status
+                        if msg['execution_status']:
+                            if msg['execution_status'] == 'success':
+                                st.success(f"✅ Query executed successfully")
+                                if msg['result_rows']:
+                                    st.info(f"📊 Returned {msg['result_rows']} rows")
+                            elif msg['execution_status'] == 'error':
+                                st.error("❌ Query execution failed")
+                
+                elif msg['message_type'] == 'system':
+                    with st.chat_message("assistant", avatar="🔧"):
+                        st.info(msg['content'])
     
     # Input for new question
     with st.form("chat_form", clear_on_submit=True):
@@ -315,21 +418,76 @@ def chatbot_tab():
             clear_button = st.form_submit_button("🗑️ Clear History")
     
     if clear_button:
+        st.session_state.memory_manager.clear_session_history(st.session_state.session_id)
         st.session_state.chat_history = []
         st.rerun()
     
     if submit_button and user_question.strip():
+        # Check if this is a data query or general question
+        is_data_query = any(keyword in user_question.lower() for keyword in 
+                           ['select', 'table', 'data', 'sales', 'count', 'sum', 'average', 'query', 'database'])
+        
+        # Log user message
+        st.session_state.memory_manager.add_message(
+            st.session_state.session_id,
+            'user',
+            user_question
+        )
+        
         with st.spinner("Processing your question..."):
+            start_time = time.time()
+            
             try:
-                # Use Cortex Analyst to process the question
-                result = st.session_state.cortex_analyst.process_question(user_question)
+                # Handle data queries differently based on semantic model availability
+                if is_data_query and not st.session_state.semantic_model_uploaded:
+                    # Warning for data queries without semantic model
+                    warning_msg = ("⚠️ **Limited Accuracy Warning**: You're asking about data but no semantic model is uploaded. "
+                                 "The response may contain inaccuracies. For better results, please upload a semantic model first.")
+                    
+                    st.warning(warning_msg)
+                    
+                    # Still process the query but with disclaimers
+                    result = st.session_state.cortex_analyst.process_question(user_question)
+                    
+                    # Add warning to memory
+                    st.session_state.memory_manager.add_message(
+                        st.session_state.session_id,
+                        'system',
+                        warning_msg
+                    )
+                
+                else:
+                    # Process normally (either non-data query or has semantic model)
+                    result = st.session_state.cortex_analyst.process_question(user_question)
+                
+                execution_time = int((time.time() - start_time) * 1000)
                 
                 if result['success']:
                     sql_query = result['sql_query']
                     data = result['data']
+                    row_count = len(data) if isinstance(data, pd.DataFrame) else 0
                     
-                    # Add to chat history
-                    st.session_state.chat_history.append((user_question, data, sql_query))
+                    # Log successful query
+                    st.session_state.memory_manager.add_message(
+                        st.session_state.session_id,
+                        'assistant',
+                        f"Query executed successfully. Returned {row_count} rows.",
+                        sql_query=sql_query,
+                        execution_status='success',
+                        result_rows=row_count,
+                        semantic_model_version='custom' if st.session_state.semantic_model_uploaded else 'auto'
+                    )
+                    
+                    # Log performance
+                    st.session_state.memory_manager.log_query_performance(
+                        st.session_state.session_id,
+                        user_question,
+                        sql_query,
+                        execution_time,
+                        row_count,
+                        st.session_state.semantic_model_uploaded,
+                        True
+                    )
                     
                     # Display the result
                     st.success("✅ Query processed successfully!")
@@ -352,12 +510,39 @@ def chatbot_tab():
                 else:
                     error_msg = result.get('error', 'Unknown error occurred')
                     st.error(f"❌ Error: {error_msg}")
-                    st.session_state.chat_history.append((user_question, error_msg, None))
+                    
+                    # Log error
+                    st.session_state.memory_manager.add_message(
+                        st.session_state.session_id,
+                        'assistant',
+                        f"Error: {error_msg}",
+                        sql_query=result.get('sql_query'),
+                        execution_status='error',
+                        semantic_model_version='custom' if st.session_state.semantic_model_uploaded else 'auto'
+                    )
+                    
+                    # Log performance for failed query
+                    st.session_state.memory_manager.log_query_performance(
+                        st.session_state.session_id,
+                        user_question,
+                        result.get('sql_query', ''),
+                        execution_time,
+                        0,
+                        st.session_state.semantic_model_uploaded,
+                        False
+                    )
             
             except Exception as e:
                 error_msg = f"An error occurred while processing your question: {str(e)}"
                 st.error(f"❌ {error_msg}")
-                st.session_state.chat_history.append((user_question, error_msg, None))
+                
+                # Log system error
+                st.session_state.memory_manager.add_message(
+                    st.session_state.session_id,
+                    'assistant',
+                    error_msg,
+                    execution_status='error'
+                )
         
         st.rerun()
 
