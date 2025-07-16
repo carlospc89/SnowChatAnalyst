@@ -120,55 +120,41 @@ Time Budget Selection: LLM model selection based on response speed preference (l
 
 ## Recent Changes (July 16, 2025)
 
-### Major Architecture Overhaul - LangChain Integration
-- **Change**: Complete rewrite of the application to integrate LangChain framework with Snowflake Cortex
-- **Implementation**: 
-  - Created `langchain_snowflake_agent.py` with LangChain agent architecture
-  - Implemented `SnowflakeCortexLLM` as LangChain-compatible wrapper
-  - Built specialized tools: `SnowflakeQueryTool`, `SnowflakeSchemaTool`, `SnowflakeAnalystTool`, `WebSearchTool`
-  - Added `LangChainSnowflakeAgent` with conversational memory and tool orchestration
-  - Created new `app_langchain.py` as the main application interface
-- **Benefits**: 
-  - Advanced AI agency with tool selection and reasoning
-  - Better memory management with conversation history
-  - Improved error handling and tool orchestration
-  - More robust query classification and intent understanding
-  - Enhanced debugging capabilities with agent metadata
-- **User Impact**: 
-  - More intelligent and context-aware responses
-  - Better tool selection based on query type
-  - Improved conversation flow with memory retention
-  - Enhanced troubleshooting with agent reasoning visibility
+### UI Layout Redesign
+- **Change**: Redesigned Chatbot tab with sidebar-based layout
+- **Implementation**: Added sidebar with chat history, time budget settings, data source toggles, and connection info
+- **Benefits**: Modern chat interface similar to popular AI applications, better organization of settings and chat history
+- **User Impact**: More intuitive interface with easy access to conversation history and settings
 
-### Enhanced Tool Architecture
-- **Change**: Replaced monolithic components with specialized LangChain tools
-- **Implementation**: 
-  - Direct SQL execution tool for complex queries
-  - Schema exploration tool for database discovery
-  - Cortex Analyst tool for natural language to SQL conversion
-  - Web search tool for current information retrieval
-- **Benefits**: Modular, maintainable, and extensible tool system
-- **User Impact**: More accurate tool selection and better query handling
+### Enhanced SQL Context
+- **Change**: Modified SQL query generation to always include database and schema context
+- **Implementation**: Updated Cortex Analyst prompts to include full database.schema.table_name format
+- **Benefits**: Proper table referencing eliminates ambiguity in multi-schema environments
+- **User Impact**: More reliable SQL execution with explicit database/schema context
 
-### Advanced Memory Management
-- **Change**: Implemented LangChain conversation memory with buffer windowing
-- **Implementation**: `ConversationBufferWindowMemory` with configurable message retention
-- **Benefits**: Maintains conversation context while preventing memory overflow
-- **User Impact**: More coherent multi-turn conversations with better context retention
+### Error Handling Improvements
+- **Change**: Enhanced SQL query display to show generated queries even on execution failure
+- **Implementation**: Always display SQL queries with troubleshooting tips regardless of execution success
+- **Benefits**: Better debugging capabilities for users when queries fail
+- **User Impact**: Users can see what SQL was generated and get specific troubleshooting guidance
 
-### Improved Agent Configuration
-- **Change**: Added comprehensive agent configuration options
-- **Implementation**: Tool toggles, model selection, memory management controls
-- **Benefits**: Users can customize agent behavior based on their needs
-- **User Impact**: Better control over agent capabilities and performance
+### Smart Data Source Integration
+- **Change**: Implemented configurable data sources with specific routing
+- **Implementation**: Added Model knowledge (Cortex LLMs), Web search (Tavily), and Semantic model data toggles
+- **Benefits**: Users can control which data sources are used for different query types
+- **User Impact**: More control over response generation and accuracy based on available resources
 
-### Previous Improvements (Legacy System)
-- UI Layout Redesign with sidebar-based chat interface
-- Enhanced SQL Context with database/schema inclusion
-- Error Handling Improvements with SQL query display
-- Smart Data Source Integration with configurable routing
-- Dynamic Model Selection based on time budget
-- Web Search Integration via Tavily API
+### Dynamic Model Selection
+- **Change**: Time budget now controls LLM model selection for performance vs quality trade-offs
+- **Implementation**: Low (llama3.1-8b), Medium (mistral-7b), High (llama3.1-70b) model mapping
+- **Benefits**: Users can choose response speed vs quality based on their needs
+- **User Impact**: Faster responses for quick queries, higher quality for complex analysis
+
+### Web Search Integration
+- **Change**: Added Tavily web search integration for current information
+- **Implementation**: Optional Tavily API key in authentication, context injection for non-data queries
+- **Benefits**: Access to current information beyond model training data
+- **User Impact**: More current and comprehensive responses for general questions
 
 ## Architecture Decisions Rationale
 
