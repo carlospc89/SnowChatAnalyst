@@ -575,6 +575,10 @@ def chatbot_tab():
                     # Step 1: Classify the query using dynamic routing
                     classification = st.session_state.query_router.classify_query(
                         user_question, st.session_state.semantic_model_uploaded)
+                    
+                    # Debug: Log classification for troubleshooting
+                    app_logger.info(f"Query classification: {classification}")
+                    print(f"DEBUG: Classification result: {classification}")
 
                     # Step 2: Get user context and settings
                     user_context = {
