@@ -17,6 +17,7 @@ from langchain.tools import BaseTool
 from langchain.callbacks.manager import CallbackManagerForToolRun
 from langchain_core.language_models.llms import LLM
 from langchain_core.outputs import LLMResult, Generation
+from pydantic import Field
 
 from snowflake_client import SnowflakeClient
 from web_search_handler import WebSearchHandler
@@ -30,10 +31,11 @@ class SnowflakeCortexLLM(LLM):
     LangChain-compatible wrapper for Snowflake Cortex Complete
     """
     
-    def __init__(self, snowflake_client: SnowflakeClient, model: str = "llama3.1-8b"):
-        super().__init__()
-        self.snowflake_client = snowflake_client
-        self.model = model
+    snowflake_client: SnowflakeClient = Field(exclude=True)
+    model: str = Field(default="llama3.1-8b")
+    
+    def __init__(self, snowflake_client: SnowflakeClient, model: str = "llama3.1-8b", **kwargs):
+        super().__init__(snowflake_client=snowflake_client, model=model, **kwargs)
     
     @property
     def _llm_type(self) -> str:
