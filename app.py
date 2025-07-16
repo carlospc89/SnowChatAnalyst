@@ -583,6 +583,10 @@ def chatbot_tab():
                     # Debug: Log classification for troubleshooting
                     app_logger.info(f"Query classification: {classification}")
                     print(f"DEBUG: Classification result: {classification}")
+                    print(f"DEBUG: Question: '{user_question}'")
+                    print(f"DEBUG: Classification type: {classification['type']}")
+                    print(f"DEBUG: Classification confidence: {classification.get('confidence', 'N/A')}")
+                    print(f"DEBUG: Classification reasoning: {classification.get('reasoning', 'N/A')}")
 
                     # Step 2: Get user context and settings
                     user_context = {
@@ -610,15 +614,19 @@ def chatbot_tab():
 
                     # Step 3: Handle web search if enabled and appropriate
                     web_search_context = None
-                    if use_web_search and st.session_state.web_search_handler and classification[
-                            'type'] != QueryType.DATA_QUERY:
-                        with st.spinner(
-                                "Searching the web for current information..."):
-                            search_results = st.session_state.web_search_handler.search(
-                                user_question)
-                            if search_results.get('success'):
-                                web_search_context = st.session_state.web_search_handler.get_context_for_llm(
-                                    search_results)
+                    if use_web_search and st.session_state.web_search_handler:
+                        # Search for any question that might benefit from current information
+                        if classification['type'] in [QueryType.GENERAL_QUESTION, QueryType.UNCLEAR]:
+                            with st.spinner(
+                                    "Searching the web for current information..."):
+                                search_results = st.session_state.web_search_handler.search(
+                                    user_question)
+                                if search_results.get('success'):
+                                    web_search_context = st.session_state.web_search_handler.get_context_for_llm(
+                                        search_results)
+                                    print(f"DEBUG: Web search successful: {len(search_results.get('results', []))} results")
+                                else:
+                                    print(f"DEBUG: Web search failed: {search_results.get('error', 'Unknown error')}")
 
                     # Step 4: Route and process based on classification and data sources
                     if classification['type'] == QueryType.DATA_QUERY:

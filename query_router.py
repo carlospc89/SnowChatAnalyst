@@ -116,12 +116,13 @@ CLASSIFICATION CATEGORIES (in order of priority):
    - "Monthly trends"
    - "Performance metrics"
 
-2. GENERAL_QUESTION - Questions about SQL, databases, or technical concepts
+2. GENERAL_QUESTION - Questions about external information, web search, or general knowledge
    Clear indicators:
-   - SQL syntax: "how to write JOIN", "what is WHERE clause"
-   - Database concepts: "explain indexes", "what is normalization"
-   - Technical definitions: "what is a primary key", "how does GROUP BY work"
-   - Learning questions: "teach me", "explain", "how does X work"
+   - Web search requests: "search the web", "look up online", "find information about"
+   - External/public data: "population of", "inhabitants of", "weather in", "news about"
+   - General knowledge: "what is", "how does", "explain", world facts, definitions
+   - SQL/Database concepts: "how to write JOIN", "what is WHERE clause", technical learning
+   - Current events: news, market information, public data not in internal database
 
 3. GREETING - Simple social interactions
    - "Hello", "Hi", "Good morning", "How are you"
@@ -282,6 +283,24 @@ Respond with ONLY the JSON object, no additional text.
                 'suggested_response_type': 'sql_generation',
                 'data_keywords': found_keywords,
                 'intent_analysis': 'Likely data analysis request based on keywords'
+            }
+        
+        # Web search and external information requests
+        web_search_indicators = [
+            'search the web', 'look up', 'find information', 'population', 'inhabitants', 
+            'weather', 'news', 'current events', 'google', 'search for', 'online',
+            'web search', 'internet', 'look online', 'what is the population',
+            'how many people', 'demographics', 'country', 'city'
+        ]
+        if any(indicator in question_lower for indicator in web_search_indicators):
+            return {
+                'type': QueryType.GENERAL_QUESTION,
+                'confidence': 0.9,
+                'reasoning': 'Contains web search or external information indicators',
+                'requires_sql': False,
+                'suggested_response_type': 'conversational',
+                'data_keywords': [],
+                'intent_analysis': 'Request for web search or external information'
             }
         
         # SQL learning questions
