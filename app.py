@@ -556,6 +556,37 @@ def chatbot_tab():
                         # Handle data query response
                         row_count = len(data) if isinstance(data, pd.DataFrame) else 0
                         
+                        # Display the result first
+                        st.success(f"✅ Query executed successfully! Found {row_count} rows.")
+                        
+                        # Show SQL query
+                        with st.expander("📋 Generated SQL Query", expanded=False):
+                            st.code(sql_query, language="sql")
+                        
+                        # Display data results with debugging info
+                        st.write(f"**Debug Info**: Data type: {type(data)}, Is DataFrame: {isinstance(data, pd.DataFrame)}")
+                        if isinstance(data, pd.DataFrame):
+                            st.write(f"**Debug Info**: DataFrame shape: {data.shape}, Empty: {data.empty}")
+                        
+                        if isinstance(data, pd.DataFrame):
+                            if not data.empty:
+                                st.subheader("📊 Query Results")
+                                st.dataframe(data, use_container_width=True)
+                                
+                                # Show basic statistics if numeric data
+                                numeric_cols = data.select_dtypes(include=['number']).columns
+                                if len(numeric_cols) > 0:
+                                    with st.expander("📈 Quick Statistics"):
+                                        st.write(data[numeric_cols].describe())
+                            else:
+                                st.info("Query executed successfully but returned no data.")
+                        elif data is None:
+                            st.warning("Query executed but no data was returned.")
+                        else:
+                            # Handle other data types
+                            st.subheader("📊 Query Results")
+                            st.write(data)
+                        
                         # Log successful query
                         st.session_state.memory_manager.add_message(
                             st.session_state.session_id,
@@ -577,24 +608,6 @@ def chatbot_tab():
                             st.session_state.semantic_model_uploaded,
                             True
                         )
-                        
-                        # Display the result
-                        st.success("✅ Query processed successfully!")
-                        
-                        with st.expander("📋 Generated SQL Query", expanded=True):
-                            st.code(sql_query, language="sql")
-                        
-                        if isinstance(data, pd.DataFrame) and not data.empty:
-                            st.subheader("📊 Results")
-                            st.dataframe(data, use_container_width=True)
-                            
-                            # Show basic statistics if numeric data
-                            numeric_cols = data.select_dtypes(include=['number']).columns
-                            if len(numeric_cols) > 0:
-                                with st.expander("📈 Quick Statistics"):
-                                    st.write(data[numeric_cols].describe())
-                        else:
-                            st.info("No data returned for this query.")
                     
                     else:
                         # Handle general question response
