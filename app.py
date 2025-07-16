@@ -420,41 +420,46 @@ def chatbot_tab():
             st.write("• Best practices")
             st.write("• Technical guidance")
     
-    # Display enhanced chat history with memory
-    chat_container = st.container()
+    # Display chat history but not if we just processed a question
+    if 'last_result' not in st.session_state:
+        st.session_state.last_result = None
     
-    with chat_container:
-        # Load chat history from memory
-        chat_history = st.session_state.memory_manager.get_chat_history(st.session_state.session_id)
+    # Only show chat history if we're not displaying a fresh result
+    if not st.session_state.get('showing_fresh_result', False):
+        chat_container = st.container()
         
-        if chat_history:
-            st.subheader("📜 Chat History")
-            for i, msg in enumerate(chat_history):
-                if msg['message_type'] == 'user':
-                    with st.chat_message("user"):
-                        st.write(msg['content'])
-                
-                elif msg['message_type'] == 'assistant':
-                    with st.chat_message("assistant"):
-                        st.write(msg['content'])
-                        
-                        # Show SQL query if available
-                        if msg['sql_query']:
-                            with st.expander("📋 Generated SQL", expanded=False):
-                                st.code(msg['sql_query'], language="sql")
-                        
-                        # Show execution status
-                        if msg['execution_status']:
-                            if msg['execution_status'] == 'success':
-                                st.success(f"✅ Query executed successfully")
-                                if msg['result_rows']:
-                                    st.info(f"📊 Returned {msg['result_rows']} rows")
-                            elif msg['execution_status'] == 'error':
-                                st.error("❌ Query execution failed")
-                
-                elif msg['message_type'] == 'system':
-                    with st.chat_message("assistant", avatar="🔧"):
-                        st.info(msg['content'])
+        with chat_container:
+            # Load chat history from memory
+            chat_history = st.session_state.memory_manager.get_chat_history(st.session_state.session_id)
+            
+            if chat_history:
+                st.subheader("📜 Chat History")
+                for i, msg in enumerate(chat_history):
+                    if msg['message_type'] == 'user':
+                        with st.chat_message("user"):
+                            st.write(msg['content'])
+                    
+                    elif msg['message_type'] == 'assistant':
+                        with st.chat_message("assistant"):
+                            st.write(msg['content'])
+                            
+                            # Show SQL query if available
+                            if msg['sql_query']:
+                                with st.expander("📋 Generated SQL", expanded=False):
+                                    st.code(msg['sql_query'], language="sql")
+                            
+                            # Show execution status
+                            if msg['execution_status']:
+                                if msg['execution_status'] == 'success':
+                                    st.success(f"✅ Query executed successfully")
+                                    if msg['result_rows']:
+                                        st.info(f"📊 Returned {msg['result_rows']} rows")
+                                elif msg['execution_status'] == 'error':
+                                    st.error("❌ Query execution failed")
+                    
+                    elif msg['message_type'] == 'system':
+                        with st.chat_message("assistant", avatar="🔧"):
+                            st.info(msg['content'])
     
     # Input for new question
     with st.form("chat_form", clear_on_submit=True):
@@ -476,6 +481,9 @@ def chatbot_tab():
         st.rerun()
     
     if submit_button and user_question.strip():
+        # Set flag to show fresh result instead of chat history
+        st.session_state.showing_fresh_result = True
+        
         # Enhanced data query detection - more precise patterns
         question_lower = user_question.lower()
         
@@ -547,6 +555,10 @@ def chatbot_tab():
                 
                 execution_time = int((time.time() - start_time) * 1000)
                 
+                # Display the user's question first
+                with st.chat_message("user"):
+                    st.write(user_question)
+                
                 if result['success']:
                     sql_query = result.get('sql_query')
                     data = result.get('data')
@@ -556,36 +568,34 @@ def chatbot_tab():
                         # Handle data query response
                         row_count = len(data) if isinstance(data, pd.DataFrame) else 0
                         
-                        # Display the result first
-                        st.success(f"✅ Query executed successfully! Found {row_count} rows.")
-                        
-                        # Show SQL query
-                        with st.expander("📋 Generated SQL Query", expanded=False):
-                            st.code(sql_query, language="sql")
-                        
-                        # Display data results with debugging info
-                        st.write(f"**Debug Info**: Data type: {type(data)}, Is DataFrame: {isinstance(data, pd.DataFrame)}")
-                        if isinstance(data, pd.DataFrame):
-                            st.write(f"**Debug Info**: DataFrame shape: {data.shape}, Empty: {data.empty}")
-                        
-                        if isinstance(data, pd.DataFrame):
-                            if not data.empty:
-                                st.subheader("📊 Query Results")
-                                st.dataframe(data, use_container_width=True)
-                                
-                                # Show basic statistics if numeric data
-                                numeric_cols = data.select_dtypes(include=['number']).columns
-                                if len(numeric_cols) > 0:
-                                    with st.expander("📈 Quick Statistics"):
-                                        st.write(data[numeric_cols].describe())
+                        with st.chat_message("assistant"):
+                            # Display the result first
+                            st.success(f"✅ Query executed successfully! Found {row_count} rows.")
+                            
+                            # Show SQL query
+                            with st.expander("📋 Generated SQL Query", expanded=False):
+                                st.code(sql_query, language="sql")
+                            
+                            # Display data results
+                            if data is not None:
+                                if isinstance(data, pd.DataFrame):
+                                    if not data.empty:
+                                        st.subheader("📊 Query Results")
+                                        st.dataframe(data, use_container_width=True)
+                                        
+                                        # Show basic statistics if numeric data
+                                        numeric_cols = data.select_dtypes(include=['number']).columns
+                                        if len(numeric_cols) > 0:
+                                            with st.expander("📈 Quick Statistics"):
+                                                st.write(data[numeric_cols].describe())
+                                    else:
+                                        st.info("Query executed successfully but returned no data.")
+                                else:
+                                    # Handle other data types
+                                    st.subheader("📊 Query Results")
+                                    st.write(data)
                             else:
-                                st.info("Query executed successfully but returned no data.")
-                        elif data is None:
-                            st.warning("Query executed but no data was returned.")
-                        else:
-                            # Handle other data types
-                            st.subheader("📊 Query Results")
-                            st.write(data)
+                                st.warning("Query executed but no data was returned.")
                         
                         # Log successful query
                         st.session_state.memory_manager.add_message(
@@ -611,7 +621,8 @@ def chatbot_tab():
                     
                     else:
                         # Handle general question response
-                        st.markdown(response_text)
+                        with st.chat_message("assistant"):
+                            st.markdown(response_text)
                         
                         # Log general response
                         st.session_state.memory_manager.add_message(
@@ -658,7 +669,11 @@ def chatbot_tab():
                     execution_status='error'
                 )
         
-        st.rerun()
+        # Add button to return to chat history after viewing results
+        if st.session_state.get('showing_fresh_result', False):
+            if st.button("📜 Back to Chat History"):
+                st.session_state.showing_fresh_result = False
+                st.rerun()
 
 def main():
     """Main application function"""
