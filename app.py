@@ -35,6 +35,10 @@ def initialize_session_state():
         )
         st.session_state.logging_configured = True
     
+    # Create app logger
+    global app_logger
+    app_logger = logging.getLogger('snowflake_chatbot')
+    
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
     if 'snowflake_client' not in st.session_state:
