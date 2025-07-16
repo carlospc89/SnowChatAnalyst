@@ -21,7 +21,9 @@ class ResponseGenerator:
     
     def generate_response(self, question: str, classification: Dict[str, Any], 
                          has_semantic_model: bool = False, 
-                         user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+                         user_context: Dict[str, Any] = None,
+                         model: str = 'llama3.1-8b',
+                         web_search_context: str = None) -> Dict[str, Any]:
         """
         Generate dynamic response based on classification
         
@@ -37,19 +39,20 @@ class ResponseGenerator:
         query_type = classification['type']
         
         if query_type == QueryType.GREETING:
-            return self._generate_greeting_response(question, has_semantic_model, user_context)
+            return self._generate_greeting_response(question, has_semantic_model, user_context, model, web_search_context)
         
         elif query_type == QueryType.HELP_REQUEST:
-            return self._generate_help_response(question, has_semantic_model, user_context)
+            return self._generate_help_response(question, has_semantic_model, user_context, model, web_search_context)
         
         elif query_type == QueryType.GENERAL_QUESTION:
-            return self._generate_general_response(question, user_context)
+            return self._generate_general_response(question, user_context, model, web_search_context)
         
         else:  # UNCLEAR or fallback
-            return self._generate_clarification_response(question, classification, user_context)
+            return self._generate_clarification_response(question, classification, user_context, model)
     
     def _generate_greeting_response(self, question: str, has_semantic_model: bool, 
-                                  user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+                                  user_context: Dict[str, Any] = None, model: str = 'llama3.1-8b',
+                                  web_search_context: str = None) -> Dict[str, Any]:
         """
         Generate personalized greeting response using Cortex
         
@@ -92,7 +95,7 @@ GUIDELINES:
 Generate a friendly greeting response in 2-3 sentences.
 """
             
-            response_text = self._call_cortex_complete(prompt)
+            response_text = self._call_cortex_complete(prompt, model)
             
             if response_text:
                 return {
@@ -116,7 +119,8 @@ Generate a friendly greeting response in 2-3 sentences.
         }
     
     def _generate_help_response(self, question: str, has_semantic_model: bool, 
-                               user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+                               user_context: Dict[str, Any] = None, model: str = 'llama3.1-8b',
+                               web_search_context: str = None) -> Dict[str, Any]:
         """
         Generate dynamic help response using Cortex
         
@@ -149,7 +153,7 @@ CURRENT LIMITATIONS:
 Generate a helpful, structured response that explains capabilities clearly and addresses their specific question. Keep it practical and actionable.
 """
             
-            response_text = self._call_cortex_complete(prompt)
+            response_text = self._call_cortex_complete(prompt, model)
             
             if response_text:
                 return {
@@ -182,7 +186,8 @@ What would you like to explore? You can ask me anything from "Show me sales by r
             'requires_sql': False
         }
     
-    def _generate_general_response(self, question: str, user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _generate_general_response(self, question: str, user_context: Dict[str, Any] = None, 
+                                 model: str = 'llama3.1-8b', web_search_context: str = None) -> Dict[str, Any]:
         """
         Generate response for general questions using Cortex
         
@@ -194,10 +199,15 @@ What would you like to explore? You can ask me anything from "Show me sales by r
             dict: General response
         """
         try:
+            # Include web search context if available
+            search_context = ""
+            if web_search_context:
+                search_context = f"\n\nCURRENT WEB INFORMATION:\n{web_search_context}\n"
+            
             prompt = f"""
 You are a knowledgeable Snowflake Cortex Analyst assistant. Answer the user's question about SQL, databases, or data analysis concepts.
 
-USER QUESTION: "{question}"
+USER QUESTION: "{question}"{search_context}
 
 GUIDELINES:
 - Provide accurate, helpful information
@@ -207,11 +217,12 @@ GUIDELINES:
 - If it's about Snowflake, mention relevant features
 - Be concise but thorough
 - Don't generate actual SQL queries - this is for conceptual help
+- If web search information is provided, incorporate relevant current information
 
 Provide a helpful, informative response.
 """
             
-            response_text = self._call_cortex_complete(prompt)
+            response_text = self._call_cortex_complete(prompt, model)
             
             if response_text:
                 return {
@@ -242,7 +253,7 @@ Could you provide more details about what you'd like to know?""",
         }
     
     def _generate_clarification_response(self, question: str, classification: Dict[str, Any], 
-                                       user_context: Dict[str, Any] = None) -> Dict[str, Any]:
+                                       user_context: Dict[str, Any] = None, model: str = 'llama3.1-8b') -> Dict[str, Any]:
         """
         Generate clarification request for unclear questions
         
@@ -276,12 +287,13 @@ What specifically would you like assistance with?""",
             'requires_sql': False
         }
     
-    def _call_cortex_complete(self, prompt: str) -> Optional[str]:
+    def _call_cortex_complete(self, prompt: str, model: str = 'llama3.1-8b') -> Optional[str]:
         """
         Call Snowflake Cortex Complete function
         
         Args:
             prompt: Prompt for Cortex
+            model: LLM model to use
             
         Returns:
             str: Generated response or None if error
@@ -289,7 +301,7 @@ What specifically would you like assistance with?""",
         try:
             cortex_query = f"""
             SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                'llama3.1-8b',
+                '{model}',
                 '{prompt.replace("'", "''")}'
             ) as generated_response
             """

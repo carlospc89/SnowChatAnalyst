@@ -144,12 +144,13 @@ class CortexAnalyst:
         
         return context
     
-    def _call_cortex_analyst(self, prompt: str) -> Optional[str]:
+    def _call_cortex_analyst(self, prompt: str, model: str = 'llama3.1-8b') -> Optional[str]:
         """
         Call Snowflake Cortex Analyst to generate SQL
         
         Args:
             prompt: Context prompt for SQL generation
+            model: LLM model to use for generation
             
         Returns:
             str: Generated SQL query or None if error
@@ -158,7 +159,7 @@ class CortexAnalyst:
             # Use Snowflake's Cortex Complete function for SQL generation
             cortex_query = f"""
             SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                'llama3.1-8b',
+                '{model}',
                 '{prompt.replace("'", "''")}'
             ) as generated_sql
             """
@@ -274,12 +275,13 @@ class CortexAnalyst:
                 'sql_query': sql_query
             }
     
-    def process_question(self, question: str) -> Dict[str, Any]:
+    def process_question(self, question: str, model: str = 'llama3.1-8b') -> Dict[str, Any]:
         """
         Process natural language question and return SQL results
         
         Args:
             question: User's natural language question
+            model: LLM model to use for generation
             
         Returns:
             dict: Result containing success status, data, SQL query, and any errors
@@ -290,8 +292,8 @@ class CortexAnalyst:
             # Create context prompt
             prompt = self._create_context_prompt(question)
             
-            # Generate SQL using Cortex Analyst
-            sql_query = self._call_cortex_analyst(prompt)
+            # Generate SQL using Cortex Analyst with specified model
+            sql_query = self._call_cortex_analyst(prompt, model)
             
             if not sql_query:
                 return {

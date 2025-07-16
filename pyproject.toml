@@ -8,4 +8,6 @@ dependencies = [
     "pyyaml>=6.0.2",
     "snowflake-connector-python>=3.16.0",
     "streamlit>=1.46.1",
+    "tavily-python>=0.7.9",
+    "trafilatura>=2.0.0",
 ]

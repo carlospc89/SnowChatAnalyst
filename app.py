@@ -5,6 +5,7 @@ from cortex_analyst import CortexAnalyst
 from memory_manager import MemoryManager
 from query_router import QueryRouter, QueryType
 from response_generator import ResponseGenerator
+from web_search_handler import WebSearchHandler
 import os
 import yaml
 import sqlite3
@@ -44,6 +45,8 @@ def initialize_session_state():
         st.session_state.query_router = None
     if 'response_generator' not in st.session_state:
         st.session_state.response_generator = None
+    if 'web_search_handler' not in st.session_state:
+        st.session_state.web_search_handler = None
 
 def reset_connection():
     """Reset connection state"""
@@ -118,6 +121,15 @@ def authentication_tab():
                 help="Snowflake role to use for connection"
             )
         
+        # Tavily API Key section
+        st.markdown("---")
+        st.markdown("### 🌐 Web Search Configuration")
+        tavily_api_key = st.text_input(
+            "Tavily API Key (Optional)",
+            type="password",
+            help="Enter your Tavily API key to enable web search functionality"
+        )
+        
         submitted = st.form_submit_button("🔗 Connect via Browser", type="primary")
     
     if submitted:
@@ -144,6 +156,12 @@ def authentication_tab():
                     st.session_state.cortex_analyst = CortexAnalyst(client)
                     st.session_state.query_router = QueryRouter(client)
                     st.session_state.response_generator = ResponseGenerator(client)
+                    
+                    # Initialize web search handler if API key is provided
+                    if tavily_api_key and tavily_api_key.strip():
+                        st.session_state.web_search_handler = WebSearchHandler(tavily_api_key)
+                    else:
+                        st.session_state.web_search_handler = None
                     st.session_state.authenticated = True
                     st.session_state.account = account
                     st.session_state.username = username
@@ -151,6 +169,7 @@ def authentication_tab():
                     st.session_state.database = database
                     st.session_state.schema = schema
                     st.session_state.role = role if role.strip() else None
+                    st.session_state.tavily_api_key = tavily_api_key if tavily_api_key.strip() else None
                     st.session_state.connection_status = "Connected"
                     
                     # Create memory session
@@ -357,41 +376,64 @@ def chatbot_tab():
         
         st.markdown("---")
         
-        # Time Budget section matching screenshot
+        # Time Budget section matching screenshot - relates to LLM model choice
         st.markdown("### Time Budget:")
         time_budget = st.radio(
             "",
             ["⚡ low", "🔄 med", "🚀 high"],
             index=1,
             horizontal=True,
-            help="Response speed preference"
+            key="time_budget_radio",
+            help="⚡ low: Fast responses with smaller models (llama3.1-8b)\n🔄 med: Balanced performance (mistral-7b)\n🚀 high: Best quality with larger models (llama3.1-70b)"
         )
+        
+        # Store the selected time budget and corresponding model
+        model_mapping = {
+            "⚡ low": "llama3.1-8b",
+            "🔄 med": "mistral-7b", 
+            "🚀 high": "llama3.1-70b"
+        }
+        st.session_state.selected_model = model_mapping[time_budget]
         
         st.markdown("---")
         
         # Data Sources section matching screenshot
         st.markdown("### Data Sources To Use:")
         
-        # Model's knowledge (always checked)
+        # Model's knowledge with Cortex LLMs
         model_knowledge = st.checkbox(
             "🧠 Model's knowledge", 
-            value=True,
-            help="AI model's built-in knowledge"
+            value=st.session_state.get('use_model_knowledge', True),
+            key="use_model_knowledge_checkbox",
+            help="Use Snowflake Cortex LLMs for general knowledge queries"
         )
         
-        # Web Search (disabled for now)
-        web_search = st.checkbox("🌐 Web Search", value=False, disabled=True)
+        # Web Search with Tavily
+        tavily_available = st.session_state.get('tavily_api_key') is not None
+        web_search_enabled = st.checkbox(
+            "🌐 Web Search", 
+            value=st.session_state.get('use_web_search', False) and tavily_available,
+            disabled=not tavily_available,
+            key="use_web_search_checkbox",
+            help="Use Tavily web search for current information" + ("" if tavily_available else " (API key required)")
+        )
         
-        # Semantic model status
-        semantic_model_active = st.checkbox(
+        # Semantic model data - only enabled if semantic model is uploaded
+        semantic_model_enabled = st.checkbox(
             "📊 Semantic Model Data", 
-            value=st.session_state.semantic_model_uploaded,
-            disabled=True,
-            help="Upload a semantic model in the Semantic Model tab for enhanced data queries"
+            value=st.session_state.get('use_semantic_model', st.session_state.semantic_model_uploaded),
+            disabled=not st.session_state.semantic_model_uploaded,
+            key="use_semantic_model_checkbox",
+            help="Use uploaded semantic model for data queries" + ("" if st.session_state.semantic_model_uploaded else " (Upload semantic model first)")
         )
         
-        # Additional data sources (disabled)
-        ncpt_metrics = st.checkbox("📈 NCPT Metrics Prediction", value=False, disabled=True)
+        # Update session state based on checkbox values
+        if model_knowledge != st.session_state.get('use_model_knowledge', True):
+            st.session_state.use_model_knowledge = model_knowledge
+        if web_search_enabled != st.session_state.get('use_web_search', False):
+            st.session_state.use_web_search = web_search_enabled
+        if semantic_model_enabled != st.session_state.get('use_semantic_model', False):
+            st.session_state.use_semantic_model = semantic_model_enabled
         
         st.markdown("---")
         
@@ -496,7 +538,7 @@ def chatbot_tab():
                     st.session_state.semantic_model_uploaded
                 )
                 
-                # Step 2: Get user context for personalized responses
+                # Step 2: Get user context and settings
                 user_context = {
                     'session_stats': st.session_state.memory_manager.get_session_stats(st.session_state.session_id),
                     'has_semantic_model': st.session_state.semantic_model_uploaded,
@@ -504,12 +546,28 @@ def chatbot_tab():
                     'schema': st.session_state.get('schema', '')
                 }
                 
-                # Step 3: Route and process based on classification
+                # Get selected model based on time budget
+                selected_model = st.session_state.get('selected_model', 'llama3.1-8b')
+                
+                # Get data source settings
+                use_model_knowledge = st.session_state.get('use_model_knowledge', True)
+                use_web_search = st.session_state.get('use_web_search', False)
+                use_semantic_model = st.session_state.get('use_semantic_model', False)
+                
+                # Step 3: Handle web search if enabled and appropriate
+                web_search_context = None
+                if use_web_search and st.session_state.web_search_handler and classification['type'] != QueryType.DATA_QUERY:
+                    with st.spinner("Searching the web for current information..."):
+                        search_results = st.session_state.web_search_handler.search(user_question)
+                        if search_results.get('success'):
+                            web_search_context = st.session_state.web_search_handler.get_context_for_llm(search_results)
+                
+                # Step 4: Route and process based on classification and data sources
                 if classification['type'] == QueryType.DATA_QUERY:
-                    # Show warning if no semantic model
-                    if not st.session_state.semantic_model_uploaded:
-                        warning_msg = ("⚠️ **Limited Accuracy Warning**: You're asking about data but no semantic model is uploaded. "
-                                     "The response may contain inaccuracies. For better results, please upload a semantic model first.")
+                    # Show warning if semantic model data source is disabled or missing
+                    if not use_semantic_model or not st.session_state.semantic_model_uploaded:
+                        warning_msg = ("⚠️ **Limited Accuracy Warning**: Data queries need semantic model data source enabled. "
+                                     "Enable 'Semantic Model Data' in the sidebar or upload a semantic model for better results.")
                         
                         st.warning(warning_msg)
                         
@@ -520,19 +578,42 @@ def chatbot_tab():
                             warning_msg
                         )
                     
-                    # Process the data query with SQL generation
-                    result = st.session_state.cortex_analyst.process_question(user_question)
-                    result['classification'] = classification
+                    # Only process SQL query if semantic model data source is enabled
+                    if use_semantic_model and st.session_state.semantic_model_uploaded:
+                        # Process the data query with SQL generation using selected model
+                        result = st.session_state.cortex_analyst.process_question(user_question, selected_model)
+                        result['classification'] = classification
+                    else:
+                        # Fallback to general response if semantic model not available/enabled
+                        result = st.session_state.response_generator.generate_response(
+                            user_question, 
+                            classification, 
+                            False,  # Treat as no semantic model
+                            user_context,
+                            selected_model,
+                            web_search_context
+                        )
+                        result['classification'] = classification
                     
                 else:
-                    # Generate dynamic response using Cortex
-                    result = st.session_state.response_generator.generate_response(
-                        user_question, 
-                        classification, 
-                        st.session_state.semantic_model_uploaded,
-                        user_context
-                    )
-                    result['classification'] = classification
+                    # Generate dynamic response using Cortex with web search context if available
+                    if not use_model_knowledge:
+                        result = {
+                            'success': True,
+                            'response': "I can only help with general questions when 'Model's knowledge' is enabled in the sidebar settings.",
+                            'type': 'info'
+                        }
+                        result['classification'] = classification
+                    else:
+                        result = st.session_state.response_generator.generate_response(
+                            user_question, 
+                            classification, 
+                            st.session_state.semantic_model_uploaded,
+                            user_context,
+                            selected_model,
+                            web_search_context
+                        )
+                        result['classification'] = classification
                 
                 execution_time = int((time.time() - start_time) * 1000)
                 

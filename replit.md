@@ -10,6 +10,8 @@ Preferred communication style: Simple, everyday language.
 Authentication method: External browser authentication for Snowflake connections (SSO).
 UI Layout: Sidebar-based chat interface with settings panel and main chat area (similar to modern AI chat applications).
 Database Context: Always include database and schema information in SQL queries for proper table referencing.
+Data Source Configuration: Support for multiple data sources (Model knowledge via Cortex LLMs, Web search via Tavily, Semantic model data)
+Time Budget Selection: LLM model selection based on response speed preference (low/med/high → different models)
 
 ## System Architecture
 
@@ -135,6 +137,24 @@ Database Context: Always include database and schema information in SQL queries 
 - **Implementation**: Always display SQL queries with troubleshooting tips regardless of execution success
 - **Benefits**: Better debugging capabilities for users when queries fail
 - **User Impact**: Users can see what SQL was generated and get specific troubleshooting guidance
+
+### Smart Data Source Integration
+- **Change**: Implemented configurable data sources with specific routing
+- **Implementation**: Added Model knowledge (Cortex LLMs), Web search (Tavily), and Semantic model data toggles
+- **Benefits**: Users can control which data sources are used for different query types
+- **User Impact**: More control over response generation and accuracy based on available resources
+
+### Dynamic Model Selection
+- **Change**: Time budget now controls LLM model selection for performance vs quality trade-offs
+- **Implementation**: Low (llama3.1-8b), Medium (mistral-7b), High (llama3.1-70b) model mapping
+- **Benefits**: Users can choose response speed vs quality based on their needs
+- **User Impact**: Faster responses for quick queries, higher quality for complex analysis
+
+### Web Search Integration
+- **Change**: Added Tavily web search integration for current information
+- **Implementation**: Optional Tavily API key in authentication, context injection for non-data queries
+- **Benefits**: Access to current information beyond model training data
+- **User Impact**: More current and comprehensive responses for general questions
 
 ## Architecture Decisions Rationale
 
