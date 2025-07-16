@@ -8,6 +8,8 @@ This is a Streamlit-based web application that provides a conversational interfa
 
 Preferred communication style: Simple, everyday language.
 Authentication method: External browser authentication for Snowflake connections (SSO).
+UI Layout: Sidebar-based chat interface with settings panel and main chat area (similar to modern AI chat applications).
+Database Context: Always include database and schema information in SQL queries for proper table referencing.
 
 ## System Architecture
 
@@ -114,6 +116,26 @@ Authentication method: External browser authentication for Snowflake connections
 - Individual user sessions maintain their own Snowflake connections
 - Modular architecture supports easy feature additions and modifications
 
+## Recent Changes (July 16, 2025)
+
+### UI Layout Redesign
+- **Change**: Redesigned Chatbot tab with sidebar-based layout
+- **Implementation**: Added sidebar with chat history, time budget settings, data source toggles, and connection info
+- **Benefits**: Modern chat interface similar to popular AI applications, better organization of settings and chat history
+- **User Impact**: More intuitive interface with easy access to conversation history and settings
+
+### Enhanced SQL Context
+- **Change**: Modified SQL query generation to always include database and schema context
+- **Implementation**: Updated Cortex Analyst prompts to include full database.schema.table_name format
+- **Benefits**: Proper table referencing eliminates ambiguity in multi-schema environments
+- **User Impact**: More reliable SQL execution with explicit database/schema context
+
+### Error Handling Improvements
+- **Change**: Enhanced SQL query display to show generated queries even on execution failure
+- **Implementation**: Always display SQL queries with troubleshooting tips regardless of execution success
+- **Benefits**: Better debugging capabilities for users when queries fail
+- **User Impact**: Users can see what SQL was generated and get specific troubleshooting guidance
+
 ## Architecture Decisions Rationale
 
 ### Streamlit Choice
@@ -121,6 +143,12 @@ Authentication method: External browser authentication for Snowflake connections
 - **Solution**: Streamlit provides built-in widgets, state management, and data visualization
 - **Pros**: Fast development, built-in data handling, easy deployment
 - **Cons**: Limited customization options, single-page application constraints
+
+### Sidebar-Based Chat Interface
+- **Problem**: Need for modern, organized chat interface with easy access to settings
+- **Solution**: Streamlit sidebar for settings and controls, main area for chat conversation
+- **Pros**: Familiar chat application layout, organized settings panel, persistent chat history access
+- **Cons**: Reduced main content width, potential mobile responsiveness issues
 
 ### Modular Component Design
 - **Problem**: Separation of concerns between UI, database access, and AI functionality

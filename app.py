@@ -327,71 +327,115 @@ def chatbot_tab():
         st.warning("⚠️ Please authenticate with Snowflake first in the Authentication tab.")
         return
     
+    # Create the sidebar layout matching the screenshot
+    with st.sidebar:
+        st.markdown("### Chat History")
+        
+        # New Chat button
+        if st.button("📝 New Chat", use_container_width=True):
+            st.session_state.memory_manager.clear_session_history(st.session_state.session_id)
+            st.session_state.chat_history = []
+            st.session_state.showing_fresh_result = False
+            st.rerun()
+        
+        # Search history
+        search_query = st.text_input("🔍 Search history...", placeholder="Search previous chats")
+        
+        # Get and display recent chats
+        chat_history = st.session_state.memory_manager.get_chat_history(st.session_state.session_id, limit=10)
+        
+        if chat_history:
+            st.markdown("---")
+            st.markdown("**Recent conversations:**")
+            for i, msg in enumerate(reversed(chat_history[-5:])):
+                if msg['message_type'] == 'user':
+                    # Create clickable chat previews
+                    preview = msg['content'][:40] + "..." if len(msg['content']) > 40 else msg['content']
+                    if st.button(f"💬 {preview}", key=f"chat_{i}", use_container_width=True):
+                        st.session_state.showing_fresh_result = False
+                        st.rerun()
+        
+        st.markdown("---")
+        
+        # Time Budget section matching screenshot
+        st.markdown("### Time Budget:")
+        time_budget = st.radio(
+            "",
+            ["⚡ low", "🔄 med", "🚀 high"],
+            index=1,
+            horizontal=True,
+            help="Response speed preference"
+        )
+        
+        st.markdown("---")
+        
+        # Data Sources section matching screenshot
+        st.markdown("### Data Sources To Use:")
+        
+        # Model's knowledge (always checked)
+        model_knowledge = st.checkbox(
+            "🧠 Model's knowledge", 
+            value=True,
+            help="AI model's built-in knowledge"
+        )
+        
+        # Web Search (disabled for now)
+        web_search = st.checkbox("🌐 Web Search", value=False, disabled=True)
+        
+        # Semantic model status
+        semantic_model_active = st.checkbox(
+            "📊 Semantic Model Data", 
+            value=st.session_state.semantic_model_uploaded,
+            disabled=True,
+            help="Upload a semantic model in the Semantic Model tab for enhanced data queries"
+        )
+        
+        # Additional data sources (disabled)
+        ncpt_metrics = st.checkbox("📈 NCPT Metrics Prediction", value=False, disabled=True)
+        
+        st.markdown("---")
+        
+        # Other Settings matching screenshot
+        st.markdown("### Other Settings:")
+        validate_answers = st.checkbox("✅ Validate answers", value=True)
+        apply_guardrails = st.checkbox("🛡️ Apply Guardrails", value=True)
+        
+        st.markdown("---")
+        
+        # Connection info
+        st.markdown("### Connection Info:")
+        st.caption(f"**Account:** {st.session_state.account}")
+        st.caption(f"**Database:** {st.session_state.database}")
+        st.caption(f"**Schema:** {st.session_state.schema}")
+        
+        # Semantic model status
+        if st.session_state.semantic_model_uploaded:
+            st.success("✅ Custom Semantic Model Active")
+        else:
+            st.info("ℹ️ Using Auto-Discovery Mode")
+    
+    # Main chat area (right side)
     st.header("🤖 Cortex Analyst Chatbot")
     
-    # Enhanced semantic model status and warnings
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        if st.session_state.semantic_model_uploaded:
-            st.success("📋 **Custom Semantic Model Active** - Enhanced accuracy for data queries")
-        else:
-            st.warning("⚠️ **No Semantic Model** - Responses about data may be less accurate. Consider uploading a semantic model for better results.")
-    
-    with col2:
-        # Session stats
-        stats = st.session_state.memory_manager.get_session_stats(st.session_state.session_id)
-        if stats:
-            st.metric("Queries", stats.get('user_messages', 0))
-    
-    # Usage guidance based on semantic model status
+    # Enhanced usage guidance
     if st.session_state.semantic_model_uploaded:
-        st.info("💡 You can ask detailed questions about your data. The semantic model will help generate accurate SQL queries.")
+        st.success("📋 **Custom Semantic Model Active** - Ask detailed questions about your data with enhanced accuracy!")
     else:
-        st.info("💡 **For data questions**: Responses may be inaccurate without a semantic model. **For general questions**: Feel free to ask anything!")
+        st.warning("⚠️ **Auto-Discovery Mode** - Consider uploading a semantic model for better data query accuracy.")
     
-    # Capability distinction
-    with st.expander("🎯 What can I help you with?", expanded=False):
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            st.subheader("📊 Data Questions")
-            if st.session_state.semantic_model_uploaded:
-                st.write("✅ **Fully Supported** - Accurate SQL generation")
-                st.write("• Sales analysis queries")
-                st.write("• Complex joins and aggregations")
-                st.write("• Trend analysis")
-                st.write("• Custom calculations")
-            else:
-                st.write("⚠️ **Limited Accuracy** - No semantic context")
-                st.write("• Basic queries may work")
-                st.write("• Results may be incorrect")
-                st.write("• Table/column names might be wrong")
-                st.write("• **Recommendation**: Upload semantic model first")
-        
-        with col_b:
-            st.subheader("💬 General Questions")
-            st.write("✅ **Always Available** - No semantic model needed")
-            st.write("• SQL help and explanations")
-            st.write("• Database concepts")
-            st.write("• Best practices")
-            st.write("• Technical guidance")
+    # Main chat display area
+    chat_container = st.container(height=500)
     
-    # Display chat history but not if we just processed a question
-    if 'last_result' not in st.session_state:
-        st.session_state.last_result = None
-    
-    # Only show chat history if we're not displaying a fresh result
-    if not st.session_state.get('showing_fresh_result', False):
-        chat_container = st.container()
-        
-        with chat_container:
-            # Load chat history from memory
+    with chat_container:
+        # Load and display chat history from memory
+        if not st.session_state.get('showing_fresh_result', False):
             chat_history = st.session_state.memory_manager.get_chat_history(st.session_state.session_id)
             
-            if chat_history:
-                st.subheader("📜 Chat History")
-                for i, msg in enumerate(chat_history):
+            if not chat_history:
+                st.info("👋 Welcome! Ask me anything about your data. Use the sidebar to adjust settings and view chat history.")
+            else:
+                # Display recent messages
+                for msg in chat_history[-10:]:  # Show last 10 messages
                     if msg['message_type'] == 'user':
                         with st.chat_message("user"):
                             st.write(msg['content'])
@@ -401,16 +445,14 @@ def chatbot_tab():
                             st.write(msg['content'])
                             
                             # Show SQL query if available
-                            if msg['sql_query']:
+                            if msg.get('sql_query'):
                                 with st.expander("📋 Generated SQL", expanded=False):
                                     st.code(msg['sql_query'], language="sql")
                             
                             # Show execution status
-                            if msg['execution_status']:
-                                if msg['execution_status'] == 'success':
-                                    st.success(f"✅ Query executed successfully")
-                                    if msg['result_rows']:
-                                        st.info(f"📊 Returned {msg['result_rows']} rows")
+                            if msg.get('execution_status'):
+                                if msg['execution_status'] == 'success' and msg.get('result_rows'):
+                                    st.success(f"✅ Query executed successfully - {msg['result_rows']} rows returned")
                                 elif msg['execution_status'] == 'error':
                                     st.error("❌ Query execution failed")
                     
@@ -418,26 +460,22 @@ def chatbot_tab():
                         with st.chat_message("assistant", avatar="🔧"):
                             st.info(msg['content'])
     
-    # Input for new question
-    with st.form("chat_form", clear_on_submit=True):
-        user_question = st.text_area(
-            "Ask a question about your data:",
-            placeholder="e.g., What were the total sales by region last quarter?",
-            height=100
-        )
-        
-        col1, col2, col3 = st.columns([1, 1, 4])
-        with col1:
-            submit_button = st.form_submit_button("🚀 Ask", type="primary")
-        with col2:
-            clear_button = st.form_submit_button("🗑️ Clear History")
+    # Chat input at bottom matching screenshot style
+    user_question = st.chat_input(
+        "Message OVAL...",
+        key="main_chat_input"
+    )
     
-    if clear_button:
-        st.session_state.memory_manager.clear_session_history(st.session_state.session_id)
-        st.session_state.chat_history = []
-        st.rerun()
+    # Add disclaimer matching the screenshot
+    st.markdown(
+        "<div style='text-align: center; color: #666; font-size: 12px; margin-top: 10px;'>"
+        "🔄 AI generated content may be incorrect. Always check for hard evidence before making business decisions."
+        "</div>", 
+        unsafe_allow_html=True
+    )
     
-    if submit_button and user_question.strip():
+    # Process the question if submitted via chat input
+    if user_question and user_question.strip():
         # Set flag to show fresh result instead of chat history
         st.session_state.showing_fresh_result = True
         

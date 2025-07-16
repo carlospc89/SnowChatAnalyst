@@ -75,7 +75,8 @@ class CortexAnalyst:
                 context += f"  - {column['COLUMN_NAME']} ({column['DATA_TYPE']})\n"
         
         context += f"\nQuestion: {question}\n"
-        context += "Generate a SQL query to answer this question. Return only the SQL query without any explanations."
+        context += f"Generate a SQL query to answer this question using the database '{active_model['database']}' and schema '{active_model['schema']}'. "
+        context += "Always include the database and schema in table references (e.g., DATABASE.SCHEMA.TABLE_NAME). Return only the SQL query without any explanations."
         
         return context
     
@@ -138,7 +139,8 @@ class CortexAnalyst:
                     context += f"  - {from_table}.{from_col} {rel_type} {to_table}.{to_col}\n"
         
         context += f"\nQuestion: {question}\n"
-        context += "Generate a SQL query to answer this question using the tables and columns described above. Return only the SQL query without any explanations."
+        context += "Generate a SQL query to answer this question using the tables and columns described above. "
+        context += "Always include the full database.schema.table_name format in table references. Return only the SQL query without any explanations."
         
         return context
     
