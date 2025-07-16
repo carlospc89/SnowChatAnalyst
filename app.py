@@ -162,6 +162,59 @@ def authentication_tab():
                 st.error(f"❌ Connection error: {str(e)}")
                 st.error("💡 Make sure you have access to Snowflake and complete the browser authentication.")
 
+def _handle_general_question(question: str) -> Dict[str, Any]:
+    """
+    Handle general questions without SQL generation
+    
+    Args:
+        question: User's general question
+        
+    Returns:
+        dict: Response structure similar to Cortex Analyst but without SQL
+    """
+    question_lower = question.lower()
+    
+    # Greeting responses
+    if any(greeting in question_lower for greeting in ['hello', 'hi', 'hey']):
+        response = ("Hello! I'm your Snowflake Cortex Analyst assistant. I can help you with:\n\n"
+                   "📊 **Data Analysis**: Ask questions about your data (works best with a semantic model)\n"
+                   "💡 **SQL Help**: Get assistance with SQL queries and database concepts\n"
+                   "🔧 **Technical Support**: Learn about Snowflake features and best practices\n\n"
+                   "What would you like to explore today?")
+    
+    elif any(pattern in question_lower for pattern in ['what can you do', 'help', 'capabilities']):
+        response = ("I'm designed to help you interact with your Snowflake data in two main ways:\n\n"
+                   "🔍 **Data Queries**: I can convert your natural language questions into SQL queries and execute them against your Snowflake database. This works best when you upload a semantic model.\n\n"
+                   "💬 **General Assistance**: I can help with SQL concepts, explain database terminology, provide best practices, and answer technical questions about Snowflake.\n\n"
+                   "**Current Status**: " + 
+                   ("✅ Custom semantic model loaded - ready for accurate data queries!" if st.session_state.semantic_model_uploaded 
+                    else "⚠️ No semantic model uploaded - data queries may be less accurate"))
+    
+    elif any(pattern in question_lower for pattern in ['thank you', 'thanks']):
+        response = "You're welcome! Feel free to ask me anything about your data or SQL queries."
+    
+    elif any(pattern in question_lower for pattern in ['bye', 'goodbye']):
+        response = "Goodbye! Your session data is saved. Feel free to return anytime to continue exploring your data."
+    
+    else:
+        # General conversational response
+        response = ("I understand you're asking about general topics. While I'm specialized in helping with Snowflake data analysis, "
+                   "I can also assist with:\n\n"
+                   "• SQL query writing and optimization\n"
+                   "• Database concepts and terminology\n"
+                   "• Snowflake features and best practices\n"
+                   "• Data analysis methodologies\n\n"
+                   "If you have specific questions about your data, I can help generate SQL queries to find answers. "
+                   "For the most accurate results, consider uploading a semantic model first.")
+    
+    return {
+        'success': True,
+        'data': None,
+        'sql_query': None,
+        'response': response,
+        'error': None
+    }
+
 def semantic_model_tab():
     """Handle semantic model upload and management"""
     st.header("📋 Semantic Model")
@@ -423,9 +476,40 @@ def chatbot_tab():
         st.rerun()
     
     if submit_button and user_question.strip():
-        # Check if this is a data query or general question
-        is_data_query = any(keyword in user_question.lower() for keyword in 
-                           ['select', 'table', 'data', 'sales', 'count', 'sum', 'average', 'query', 'database'])
+        # Enhanced data query detection - more precise patterns
+        question_lower = user_question.lower()
+        
+        # Patterns that indicate data queries (requiring SQL generation)
+        data_query_patterns = [
+            # Direct SQL mentions
+            'select', 'from', 'where', 'group by', 'order by', 'having', 'join',
+            # Aggregation requests
+            'how many', 'count of', 'total', 'sum of', 'average', 'maximum', 'minimum',
+            # Analysis requests
+            'show me', 'find', 'list', 'get', 'retrieve', 'analyze', 'breakdown',
+            # Data-specific terms with context
+            'sales by', 'revenue by', 'customers who', 'products that', 'orders where',
+            'data from', 'records from', 'rows from', 'information from',
+            # Time-based queries
+            'last month', 'this year', 'between', 'since', 'until', 'during',
+            # Comparison queries
+            'compare', 'versus', 'vs', 'top', 'bottom', 'highest', 'lowest'
+        ]
+        
+        # Exclude common greetings and general questions
+        general_patterns = [
+            'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+            'how are you', 'what can you do', 'help', 'explain', 'what is',
+            'how to', 'can you', 'tell me about', 'what does', 'define',
+            'thank you', 'thanks', 'bye', 'goodbye'
+        ]
+        
+        # Check if it's a general question first
+        is_general_question = any(pattern in question_lower for pattern in general_patterns)
+        
+        # Check if it's a data query
+        is_data_query = (not is_general_question and 
+                        any(pattern in question_lower for pattern in data_query_patterns))
         
         # Log user message
         st.session_state.memory_manager.add_message(
@@ -438,74 +522,91 @@ def chatbot_tab():
             start_time = time.time()
             
             try:
-                # Handle data queries differently based on semantic model availability
-                if is_data_query and not st.session_state.semantic_model_uploaded:
-                    # Warning for data queries without semantic model
-                    warning_msg = ("⚠️ **Limited Accuracy Warning**: You're asking about data but no semantic model is uploaded. "
-                                 "The response may contain inaccuracies. For better results, please upload a semantic model first.")
+                if is_data_query:
+                    # This is a data query - use Cortex Analyst for SQL generation
+                    if not st.session_state.semantic_model_uploaded:
+                        # Warning for data queries without semantic model
+                        warning_msg = ("⚠️ **Limited Accuracy Warning**: You're asking about data but no semantic model is uploaded. "
+                                     "The response may contain inaccuracies. For better results, please upload a semantic model first.")
+                        
+                        st.warning(warning_msg)
+                        
+                        # Add warning to memory
+                        st.session_state.memory_manager.add_message(
+                            st.session_state.session_id,
+                            'system',
+                            warning_msg
+                        )
                     
-                    st.warning(warning_msg)
-                    
-                    # Still process the query but with disclaimers
+                    # Process the data query with SQL generation
                     result = st.session_state.cortex_analyst.process_question(user_question)
                     
-                    # Add warning to memory
-                    st.session_state.memory_manager.add_message(
-                        st.session_state.session_id,
-                        'system',
-                        warning_msg
-                    )
-                
                 else:
-                    # Process normally (either non-data query or has semantic model)
-                    result = st.session_state.cortex_analyst.process_question(user_question)
+                    # This is a general question - respond without SQL generation
+                    result = _handle_general_question(user_question)
                 
                 execution_time = int((time.time() - start_time) * 1000)
                 
                 if result['success']:
-                    sql_query = result['sql_query']
-                    data = result['data']
-                    row_count = len(data) if isinstance(data, pd.DataFrame) else 0
+                    sql_query = result.get('sql_query')
+                    data = result.get('data')
+                    response_text = result.get('response')
                     
-                    # Log successful query
-                    st.session_state.memory_manager.add_message(
-                        st.session_state.session_id,
-                        'assistant',
-                        f"Query executed successfully. Returned {row_count} rows.",
-                        sql_query=sql_query,
-                        execution_status='success',
-                        result_rows=row_count,
-                        semantic_model_version='custom' if st.session_state.semantic_model_uploaded else 'auto'
-                    )
-                    
-                    # Log performance
-                    st.session_state.memory_manager.log_query_performance(
-                        st.session_state.session_id,
-                        user_question,
-                        sql_query,
-                        execution_time,
-                        row_count,
-                        st.session_state.semantic_model_uploaded,
-                        True
-                    )
-                    
-                    # Display the result
-                    st.success("✅ Query processed successfully!")
-                    
-                    with st.expander("📋 Generated SQL Query", expanded=True):
-                        st.code(sql_query, language="sql")
-                    
-                    if isinstance(data, pd.DataFrame) and not data.empty:
-                        st.subheader("📊 Results")
-                        st.dataframe(data, use_container_width=True)
+                    if is_data_query and sql_query:
+                        # Handle data query response
+                        row_count = len(data) if isinstance(data, pd.DataFrame) else 0
                         
-                        # Show basic statistics if numeric data
-                        numeric_cols = data.select_dtypes(include=['number']).columns
-                        if len(numeric_cols) > 0:
-                            with st.expander("📈 Quick Statistics"):
-                                st.write(data[numeric_cols].describe())
+                        # Log successful query
+                        st.session_state.memory_manager.add_message(
+                            st.session_state.session_id,
+                            'assistant',
+                            f"Query executed successfully. Returned {row_count} rows.",
+                            sql_query=sql_query,
+                            execution_status='success',
+                            result_rows=row_count,
+                            semantic_model_version='custom' if st.session_state.semantic_model_uploaded else 'auto'
+                        )
+                        
+                        # Log performance
+                        st.session_state.memory_manager.log_query_performance(
+                            st.session_state.session_id,
+                            user_question,
+                            sql_query,
+                            execution_time,
+                            row_count,
+                            st.session_state.semantic_model_uploaded,
+                            True
+                        )
+                        
+                        # Display the result
+                        st.success("✅ Query processed successfully!")
+                        
+                        with st.expander("📋 Generated SQL Query", expanded=True):
+                            st.code(sql_query, language="sql")
+                        
+                        if isinstance(data, pd.DataFrame) and not data.empty:
+                            st.subheader("📊 Results")
+                            st.dataframe(data, use_container_width=True)
+                            
+                            # Show basic statistics if numeric data
+                            numeric_cols = data.select_dtypes(include=['number']).columns
+                            if len(numeric_cols) > 0:
+                                with st.expander("📈 Quick Statistics"):
+                                    st.write(data[numeric_cols].describe())
+                        else:
+                            st.info("No data returned for this query.")
+                    
                     else:
-                        st.info("No data returned for this query.")
+                        # Handle general question response
+                        st.markdown(response_text)
+                        
+                        # Log general response
+                        st.session_state.memory_manager.add_message(
+                            st.session_state.session_id,
+                            'assistant',
+                            response_text,
+                            execution_status='success'
+                        )
                 
                 else:
                     error_msg = result.get('error', 'Unknown error occurred')

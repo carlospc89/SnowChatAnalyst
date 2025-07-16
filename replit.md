@@ -48,15 +48,24 @@ Authentication method: External browser authentication for Snowflake connections
   - Semantic model generation from database schema
   - Context-aware prompt creation for better query results
   - Integration with Snowflake's AI capabilities
+  - Support for custom YAML semantic models
+
+### 4. Memory Manager (`memory_manager.py`)
+- **Purpose**: In-memory SQLite database for session and chat history management
+- **Key Features**:
+  - Persistent chat history with performance tracking
+  - Session statistics and semantic model usage tracking
+  - Query performance logging and analysis
 
 ## Data Flow
 
 1. **Authentication**: User provides Snowflake credentials through external browser authentication
 2. **Connection**: SnowflakeClient establishes secure connection to Snowflake instance
 3. **Semantic Model Setup**: User can either upload custom YAML semantic model or use automatic schema discovery
-4. **Query Processing**: User natural language questions are processed through Cortex Analyst
-5. **Result Display**: SQL results are returned and displayed in the Streamlit interface
-6. **Chat History**: Conversations are maintained in session state for context
+4. **Query Classification**: System intelligently distinguishes between data queries (requiring SQL) and general questions (conversational)
+5. **Query Processing**: Data questions are processed through Cortex Analyst with appropriate warnings if no semantic model is present
+6. **Result Display**: SQL results are returned and displayed in the Streamlit interface with performance metrics
+7. **Chat History**: All conversations are stored in in-memory SQLite database with session tracking
 
 ## External Dependencies
 
