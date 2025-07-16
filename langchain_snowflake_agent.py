@@ -31,11 +31,10 @@ class SnowflakeCortexLLM(LLM):
     LangChain-compatible wrapper for Snowflake Cortex Complete
     """
     
-    snowflake_client: SnowflakeClient = Field(exclude=True)
-    model: str = Field(default="llama3.1-8b")
-    
     def __init__(self, snowflake_client: SnowflakeClient, model: str = "llama3.1-8b", **kwargs):
-        super().__init__(snowflake_client=snowflake_client, model=model, **kwargs)
+        super().__init__(**kwargs)
+        self._snowflake_client = snowflake_client
+        self._model = model
     
     @property
     def _llm_type(self) -> str:
@@ -49,12 +48,12 @@ class SnowflakeCortexLLM(LLM):
             
             cortex_query = f"""
             SELECT SNOWFLAKE.CORTEX.COMPLETE(
-                '{self.model}',
+                '{self._model}',
                 '{clean_prompt}'
             ) as response
             """
             
-            result = self.snowflake_client.execute_query(cortex_query)
+            result = self._snowflake_client.execute_query(cortex_query)
             
             if result is not None and not result.empty:
                 return result.iloc[0]['RESPONSE']
