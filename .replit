@@ -2,7 +2,7 @@ modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["glibcLocales", "libyaml"]
+packages = ["bash", "glibcLocales", "libyaml"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -18,20 +18,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Streamlit App"
+args = "install_snowflake"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "install_snowflake"
-
-[[workflows.workflow]]
-name = "Streamlit App"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "uv add snowflake-connector-python pandas && streamlit run app.py --server.port 5000"
-waitForPort = 5000
+args = "LangChain Streamlit App"
 
 [[workflows.workflow]]
 name = "install_snowflake"
@@ -40,6 +31,15 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "uv add snowflake-connector-python"
+
+[[workflows.workflow]]
+name = "LangChain Streamlit App"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run app_langchain.py --server.port 5000"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
