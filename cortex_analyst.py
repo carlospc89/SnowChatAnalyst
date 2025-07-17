@@ -106,68 +106,100 @@ Return only the SQL query without any explanations or markdown formatting."""
         """
         context = ""
         
-        # Handle semantic model structure
-        if 'semantic_model' in semantic_model:
-            model_info = semantic_model['semantic_model']
+        # Handle semantic model structure - updated for correct YAML format
+        if 'model' in semantic_model:
+            model_info = semantic_model['model']
             
             if 'name' in model_info:
                 context += f"Semantic Model: {model_info['name']}\n"
             if 'description' in model_info:
                 context += f"Description: {model_info['description']}\n"
-            
-            context += "\nAvailable Tables and Columns:\n"
-            
-            # Process tables
-            if 'tables' in model_info:
-                for table in model_info['tables']:
-                    table_name = table.get('name', 'UNKNOWN')
-                    context += f"\n{table_name}:"
-                    
-                    if 'description' in table:
-                        context += f" - {table['description']}"
-                    context += "\n"
-                    
-                    # Process columns
-                    if 'columns' in table:
-                        for column in table['columns']:
-                            col_name = column.get('name', 'UNKNOWN')
-                            col_type = column.get('type', 'UNKNOWN')
-                            col_desc = column.get('description', '')
-                            
-                            context += f"  - {col_name} ({col_type})"
-                            if col_desc:
-                                context += f" - {col_desc}"
-                            context += "\n"
-            
-            # Add relationships if available
-            if 'relationships' in model_info:
-                context += "\nTable Relationships:\n"
-                for rel in model_info['relationships']:
-                    from_table = rel.get('from_table', '')
-                    from_col = rel.get('from_column', '')
-                    to_table = rel.get('to_table', '')
-                    to_col = rel.get('to_column', '')
-                    rel_type = rel.get('type', 'related to')
-                    
-                    context += f"  - {from_table}.{from_col} {rel_type} {to_table}.{to_col}\n"
+        
+        context += "\nAvailable Tables and Columns:\n"
+        
+        # Process logical_tables from the semantic model
+        if 'logical_tables' in semantic_model:
+            for table in semantic_model['logical_tables']:
+                table_name = table.get('name', 'UNKNOWN')
+                table_desc = table.get('description', '')
+                physical_table = table.get('table', '')
+                
+                context += f"\n{table_name}"
+                if table_desc:
+                    context += f" - {table_desc}"
+                if physical_table:
+                    context += f" (Physical table: {physical_table})"
+                context += "\n"
+                
+                # Process columns
+                if 'columns' in table:
+                    for column in table['columns']:
+                        col_name = column.get('name', 'UNKNOWN')
+                        col_type = column.get('data_type', 'UNKNOWN')
+                        col_desc = column.get('description', '')
+                        synonyms = column.get('synonyms', [])
+                        
+                        context += f"  - {col_name} ({col_type})"
+                        if col_desc:
+                            context += f" - {col_desc}"
+                        if synonyms:
+                            context += f" [synonyms: {', '.join(synonyms)}]"
+                        context += "\n"
+        
+        # Add relationships if available
+        if 'relationships' in semantic_model:
+            context += "\nTable Relationships:\n"
+            for rel in semantic_model['relationships']:
+                from_table = rel.get('from_table', '')
+                from_col = rel.get('from_column', '')
+                to_table = rel.get('to_table', '')
+                to_col = rel.get('to_column', '')
+                rel_type = rel.get('relationship_type', 'related to')
+                
+                context += f"  - {from_table}.{from_col} {rel_type} {to_table}.{to_col}\n"
+        
+        # Add metrics if available - this is crucial for revenue questions
+        if 'metrics' in semantic_model:
+            context += "\nAvailable Metrics:\n"
+            for metric in semantic_model['metrics']:
+                metric_name = metric.get('name', 'UNKNOWN')
+                metric_desc = metric.get('description', '')
+                metric_sql = metric.get('sql', '')
+                synonyms = metric.get('synonyms', [])
+                
+                context += f"  - {metric_name}"
+                if metric_desc:
+                    context += f" - {metric_desc}"
+                if metric_sql:
+                    context += f" (SQL: {metric_sql})"
+                if synonyms:
+                    context += f" [synonyms: {', '.join(synonyms)}]"
+                context += "\n"
         
         context += f"\nQuestion: {question}\n"
         context += "Generate a SQL query to answer this question using the tables and columns described above.\n"
         
-        # Get database and schema names from the model_info (within custom semantic model context)
-        if 'semantic_model' in semantic_model:
-            model_data = semantic_model['semantic_model']
-            db_name = model_data.get('database', self.client.database or 'DATABASE')
-            schema_name = model_data.get('schema', self.client.schema or 'SCHEMA')
-        else:
-            # Fallback to client information
-            db_name = self.client.database or 'DATABASE'
-            schema_name = self.client.schema or 'SCHEMA'
+        # Get database and schema names from the semantic model
+        db_name = self.client.database or 'DATABASE'
+        schema_name = self.client.schema or 'SCHEMA'
+        
+        # Try to extract database and schema from the first logical table if available
+        if 'logical_tables' in semantic_model and len(semantic_model['logical_tables']) > 0:
+            first_table = semantic_model['logical_tables'][0]
+            if 'table' in first_table:
+                # Parse format like "CORTEX_DEMO.ANALYTICS.ORDERS" 
+                table_parts = first_table['table'].split('.')
+                if len(table_parts) >= 2:
+                    db_name = table_parts[0]
+                    schema_name = table_parts[1]
             
-        context += f"CRITICAL: Always use the full qualified table names: {db_name}.{schema_name}.TABLE_NAME\n"
-        context += f"Database: {db_name}\n"
-        context += f"Schema: {schema_name}\n"
-        context += f"Example format: SELECT * FROM {db_name}.{schema_name}.TABLE_NAME\n"
+        context += f"CRITICAL INSTRUCTIONS:\n"
+        context += f"1. Always use the full qualified table names from the physical table mappings above\n"
+        context += f"2. When asking for metrics like 'revenue' or 'total sales', use the exact column names or SQL expressions from the metrics section\n"
+        context += f"3. Pay attention to synonyms - 'revenue' maps to 'total_amount' column or SUM(total_amount)\n"
+        context += f"4. Use the physical table names, not the logical table names\n"
+        context += f"5. Database: {db_name}, Schema: {schema_name}\n"
+        context += f"Example format: SELECT SUM(total_amount) FROM {db_name}.{schema_name}.ORDERS\n"
         context += "Return only the SQL query without any explanations or markdown formatting."
         
         return context

@@ -1,0 +1,91 @@
+# Semantic Model for Cortex Analyst
+model:
+  name: "sales_data_model"
+  description: "Semantic model for sales data analysis"
+  
+logical_tables:
+  - name: "sales_orders"
+    description: "Sales order transactions"
+    table: "CORTEX_DEMO.ANALYTICS.ORDERS"
+    columns:
+      - name: "order_id"
+        description: "Unique identifier for each order"
+        data_type: "INTEGER"
+        synonyms: ["order number", "transaction id"]
+      - name: "customer_id"
+        description: "Customer identifier"
+        data_type: "INTEGER"
+        synonyms: ["customer number", "client id"]
+      - name: "order_date"
+        description: "Date when the order was placed"
+        data_type: "DATE"
+        synonyms: ["purchase date", "transaction date"]
+      - name: "total_amount"
+        description: "Total order amount in USD"
+        data_type: "DECIMAL"
+        synonyms: ["order value", "revenue", "sales amount"]
+      - name: "quantity"
+        description: "Number of items in the order"
+        data_type: "INTEGER"
+        synonyms: ["qty", "item count"]
+      - name: "product_category"
+        description: "Product category"
+        data_type: "VARCHAR"
+        synonyms: ["category", "product type"]
+        sample_values: ["Electronics", "Clothing", "Books", "Home & Garden"]
+
+  - name: "customers"
+    description: "Customer information and demographics"
+    table: "CORTEX_DEMO.ANALYTICS.CUSTOMERS"
+    columns:
+      - name: "customer_id"
+        description: "Unique customer identifier"
+        data_type: "INTEGER"
+        synonyms: ["customer number", "client id"]
+      - name: "customer_name"
+        description: "Customer's full name"
+        data_type: "VARCHAR"
+        synonyms: ["name", "client name", "customer"]
+      - name: "region"
+        description: "Geographic region of the customer"
+        data_type: "VARCHAR"
+        synonyms: ["location", "area", "geography"]
+        sample_values: ["North America", "Europe", "Asia"]
+
+relationships:
+  - name: "customer_orders"
+    description: "Relationship between customers and their orders"
+    from_table: "customers"
+    from_column: "customer_id"
+    to_table: "sales_orders"
+    to_column: "customer_id"
+    relationship_type: "one_to_many"
+
+metrics:
+  - name: "total_revenue"
+    description: "Sum of all order amounts"
+    sql: "SUM(total_amount)"
+    synonyms: ["total sales", "revenue", "sales total"]
+  - name: "order_count"
+    description: "Number of orders"
+    sql: "COUNT(order_id)"
+    synonyms: ["number of orders", "order volume"]
+  - name: "average_order_value"
+    description: "Average order amount"
+    sql: "AVG(total_amount)"
+    synonyms: ["AOV", "average order size"]
+  - name: "customer_count"
+    description: "Number of unique customers"
+    sql: "COUNT(DISTINCT customer_id)"
+    synonyms: ["unique customers", "customer base"]
+
+verified_queries:
+  - name: "monthly_revenue"
+    question: "What is the total revenue by month?"
+    sql: "SELECT DATE_TRUNC('month', order_date) as month, SUM(total_amount) as revenue FROM CORTEX_DEMO.ANALYTICS.ORDERS GROUP BY 1 ORDER BY 1"
+  - name: "revenue_by_region"
+    question: "Show me revenue by customer region"
+    sql: "SELECT c.region, SUM(o.total_amount) as revenue FROM CORTEX_DEMO.ANALYTICS.ORDERS o JOIN CORTEX_DEMO.ANALYTICS.CUSTOMERS c ON o.customer_id = c.customer_id GROUP BY 1 ORDER BY 2 DESC"
+  - name: "top_customers"
+    question: "Who are the top 5 customers by revenue?"
+    sql: "SELECT c.customer_name, SUM(o.total_amount) as revenue FROM CORTEX_DEMO.ANALYTICS.ORDERS o JOIN CORTEX_DEMO.ANALYTICS.CUSTOMERS c ON o.customer_id = c.customer_id GROUP BY 1 ORDER BY 2 DESC LIMIT 5"
