@@ -153,10 +153,21 @@ Return only the SQL query without any explanations or markdown formatting."""
         
         context += f"\nQuestion: {question}\n"
         context += "Generate a SQL query to answer this question using the tables and columns described above.\n"
-        context += f"CRITICAL: Always use the full qualified table names: {active_model['database']}.{active_model['schema']}.TABLE_NAME\n"
-        context += f"Database: {active_model['database']}\n"
-        context += f"Schema: {active_model['schema']}\n"
-        context += "Example format: SELECT * FROM DATABASE.SCHEMA.TABLE_NAME\n"
+        
+        # Use the correct variable name based on context
+        if self.custom_semantic_model:
+            # For custom semantic models, use database/schema from the model or fallback to client
+            db_name = model_info.get('database', self.client.database or 'DATABASE')
+            schema_name = model_info.get('schema', self.client.schema or 'SCHEMA')
+        else:
+            # For auto-discovered models, use active_model
+            db_name = active_model.get('database', self.client.database or 'DATABASE')
+            schema_name = active_model.get('schema', self.client.schema or 'SCHEMA')
+            
+        context += f"CRITICAL: Always use the full qualified table names: {db_name}.{schema_name}.TABLE_NAME\n"
+        context += f"Database: {db_name}\n"
+        context += f"Schema: {schema_name}\n"
+        context += f"Example format: SELECT * FROM {db_name}.{schema_name}.TABLE_NAME\n"
         context += "Return only the SQL query without any explanations or markdown formatting."
         
         return context
