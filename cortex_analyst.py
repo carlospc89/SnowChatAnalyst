@@ -154,15 +154,15 @@ Return only the SQL query without any explanations or markdown formatting."""
         context += f"\nQuestion: {question}\n"
         context += "Generate a SQL query to answer this question using the tables and columns described above.\n"
         
-        # Use the correct variable name based on context
-        if self.custom_semantic_model:
-            # For custom semantic models, use database/schema from the model or fallback to client
-            db_name = model_info.get('database', self.client.database or 'DATABASE')
-            schema_name = model_info.get('schema', self.client.schema or 'SCHEMA')
+        # Get database and schema names from the model_info (within custom semantic model context)
+        if 'semantic_model' in semantic_model:
+            model_data = semantic_model['semantic_model']
+            db_name = model_data.get('database', self.client.database or 'DATABASE')
+            schema_name = model_data.get('schema', self.client.schema or 'SCHEMA')
         else:
-            # For auto-discovered models, use active_model
-            db_name = active_model.get('database', self.client.database or 'DATABASE')
-            schema_name = active_model.get('schema', self.client.schema or 'SCHEMA')
+            # Fallback to client information
+            db_name = self.client.database or 'DATABASE'
+            schema_name = self.client.schema or 'SCHEMA'
             
         context += f"CRITICAL: Always use the full qualified table names: {db_name}.{schema_name}.TABLE_NAME\n"
         context += f"Database: {db_name}\n"
