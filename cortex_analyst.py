@@ -58,7 +58,20 @@ class CortexAnalyst:
         active_model = self._get_active_semantic_model()
         
         if not active_model:
-            return f"Convert this question to SQL: {question}"
+            # Fallback using direct database/schema info from client
+            if self.client.database and self.client.schema:
+                return f"""Convert this question to SQL using these database details:
+Database: {self.client.database}
+Schema: {self.client.schema}
+
+CRITICAL: Always use the full qualified table names: {self.client.database}.{self.client.schema}.TABLE_NAME
+Example format: SELECT * FROM {self.client.database}.{self.client.schema}.TABLE_NAME
+
+Question: {question}
+
+Return only the SQL query without any explanations or markdown formatting."""
+            else:
+                return f"Convert this question to SQL: {question}"
         
         # Handle custom semantic model format
         if self.custom_semantic_model:
@@ -139,8 +152,12 @@ class CortexAnalyst:
                     context += f"  - {from_table}.{from_col} {rel_type} {to_table}.{to_col}\n"
         
         context += f"\nQuestion: {question}\n"
-        context += "Generate a SQL query to answer this question using the tables and columns described above. "
-        context += "Always include the full database.schema.table_name format in table references. Return only the SQL query without any explanations."
+        context += "Generate a SQL query to answer this question using the tables and columns described above.\n"
+        context += f"CRITICAL: Always use the full qualified table names: {active_model['database']}.{active_model['schema']}.TABLE_NAME\n"
+        context += f"Database: {active_model['database']}\n"
+        context += f"Schema: {active_model['schema']}\n"
+        context += "Example format: SELECT * FROM DATABASE.SCHEMA.TABLE_NAME\n"
+        context += "Return only the SQL query without any explanations or markdown formatting."
         
         return context
     
@@ -289,8 +306,14 @@ class CortexAnalyst:
         sql_query = None
         
         try:
+            # Debug: Print database/schema information
+            print(f"DEBUG: Client database: {self.client.database}")
+            print(f"DEBUG: Client schema: {self.client.schema}")
+            print(f"DEBUG: Active semantic model available: {self._get_active_semantic_model() is not None}")
+            
             # Create context prompt
             prompt = self._create_context_prompt(question)
+            print(f"DEBUG: Generated prompt preview: {prompt[:200]}...")
             
             # Generate SQL using Cortex Analyst with specified model
             sql_query = self._call_cortex_analyst(prompt, model)
