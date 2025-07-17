@@ -176,8 +176,20 @@ Return only the SQL query without any explanations or markdown formatting."""
                     context += f" [synonyms: {', '.join(synonyms)}]"
                 context += "\n"
         
+        # Add verified queries as examples if available
+        if 'verified_queries' in semantic_model:
+            context += "\nEXAMPLE VERIFIED QUERIES:\n"
+            for vq in semantic_model['verified_queries']:
+                vq_name = vq.get('name', '')
+                vq_question = vq.get('question', '')
+                vq_sql = vq.get('sql', '')
+                if vq_question and vq_sql:
+                    context += f"Q: {vq_question}\n"
+                    context += f"SQL: {vq_sql}\n\n"
+        
         context += f"\nQuestion: {question}\n"
         context += "Generate a SQL query to answer this question using the tables and columns described above.\n"
+        context += "Follow the patterns from the verified queries examples.\n"
         
         # Get database and schema names from the semantic model
         db_name = self.client.database or 'DATABASE'
@@ -193,13 +205,18 @@ Return only the SQL query without any explanations or markdown formatting."""
                     db_name = table_parts[0]
                     schema_name = table_parts[1]
             
-        context += f"CRITICAL INSTRUCTIONS:\n"
-        context += f"1. Always use the full qualified table names from the physical table mappings above\n"
-        context += f"2. When asking for metrics like 'revenue' or 'total sales', use the exact column names or SQL expressions from the metrics section\n"
-        context += f"3. Pay attention to synonyms - 'revenue' maps to 'total_amount' column or SUM(total_amount)\n"
-        context += f"4. Use the physical table names, not the logical table names\n"
-        context += f"5. Database: {db_name}, Schema: {schema_name}\n"
-        context += f"Example format: SELECT SUM(total_amount) FROM {db_name}.{schema_name}.ORDERS\n"
+        context += f"CRITICAL SQL GENERATION RULES:\n"
+        context += f"1. Always use the exact physical table names from the mappings above\n"
+        context += f"2. When using table aliases, be consistent throughout the query\n"
+        context += f"3. Column references must match the exact column names defined above\n"
+        context += f"4. For GROUP BY clauses, use the same columns that appear in SELECT (non-aggregated)\n"
+        context += f"5. When joining tables, use the relationship information provided\n"
+        context += f"6. For metrics like 'revenue', use SUM(total_amount) from the metrics section\n"
+        context += f"7. Database: {db_name}, Schema: {schema_name}\n"
+        context += f"\nEXAMPLE PATTERNS:\n"
+        context += f"- Simple query: SELECT column_name FROM {db_name}.{schema_name}.TABLE_NAME\n"
+        context += f"- With alias: SELECT t.column_name FROM {db_name}.{schema_name}.TABLE_NAME t\n"
+        context += f"- Join query: SELECT c.customer_name, SUM(o.total_amount) FROM {db_name}.{schema_name}.CUSTOMERS c JOIN {db_name}.{schema_name}.ORDERS o ON c.customer_id = o.customer_id GROUP BY c.customer_name\n"
         context += "Return only the SQL query without any explanations or markdown formatting."
         
         return context
